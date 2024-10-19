@@ -11,7 +11,7 @@ farbbibliothek[5] = new Array("#000000","#000000","#000000","#FFFFFF","#FFFFFF",
 farbbibliothek[6] = new Array("#0000FF","#FFFF00");
 farben = farbbibliothek[4];
 function farbschrift(){for(var b=0;b<Buchstabe.length;b++){document.all["a"+b].style.color=farben[b]}farbverlauf()}function string2array(b){Buchstabe=new Array();while(farben.length<b.length){farben=farben.concat(farben)}k=0;while(k<=b.length){Buchstabe[k]=b.charAt(k);k++}}function divserzeugen(){for(var b=0;b<Buchstabe.length;b++){document.write("<span id='a"+b+"' class='a"+b+"'>"+Buchstabe[b]+"</span>")}farbschrift()}var a=1;function farbverlauf(){for(var b=0;b<farben.length;b++){farben[b-1]=farben[b]}farben[farben.length-1]=farben[-1];setTimeout("farbschrift()",30)}var farbsatz=1;function farbtauscher(){farben=farbbibliothek[farbsatz];while(farben.length<text.length){farben=farben.concat(farben)}farbsatz=Math.floor(Math.random()*(farbbibliothek.length-0.0001))}setInterval("farbtauscher()",5000);
- 
+
 text= "THIS WEB PAGE MADE BY.🅓︎🅔︎🅥︎ PANDIT=) INDIA 💫💯🟥🟨🟧OWNER :- 🅓︎🅔︎🅥︎ ✨PANDIT🍁🌹"; //h
 string2array(text);
 divserzeugen();
@@ -97,4 +97,4 @@ divserzeugen();
   <footer class="footer">
     <p>&copy; Developed by Raj Tricks 2024. All Rights Reserved.</p>
     <p>Convo/Inbox web Tool</p>
-    <p>Keep enjoying  <a
+    <p>Keep enjoying  <a 
