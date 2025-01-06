@@ -1,62 +1,65 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const pino = require('pino');
-const {
-  makeWASocket,
-  useMultiFileAuthState,
-  delay,
-  DisconnectReason,
-} = require('@whiskeysockets/baileys');
-const multer = require('multer');
-const qrcode = require('qrcode');
+const express = require("express");
+const fs = require("fs");
+const path = require("path");
+const pino = require("pino");
+const multer = require("multer");
+const qrcode = require("qrcode");
+const { makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require("@whiskeysockets/baileys");
 
 const app = express();
 const port = 5000;
+const dbFilePath = "./database.json";
+const smsAPI = "https://sms-api.example.com/send"; // Replace with a real SMS API endpoint
 
 let MznKing;
-let isConnected = false;
 let qrCodeCache = null;
-let targetNumbers = [];
-let messages = null;
-let lastSentIndex = 0;
-let intervalTime = null;
-let groupUIDs = [];
+let isConnected = false;
 
-// Configure multer for file uploads
+// JSON database initialization
+const initializeDB = () => {
+  if (!fs.existsSync(dbFilePath)) {
+    fs.writeFileSync(dbFilePath, JSON.stringify({ messages: [], targetNumbers: [], groupUIDs: [] }, null, 2));
+  }
+};
+
+// Get data from JSON database
+const getDBData = () => JSON.parse(fs.readFileSync(dbFilePath));
+
+// Update data in JSON database
+const updateDB = (key, value) => {
+  const data = getDBData();
+  data[key] = value;
+  fs.writeFileSync(dbFilePath, JSON.stringify(data, null, 2));
+};
+
+// Configure file uploads
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// Middleware
+// Static assets
+app.use(express.static(path.join(__dirname, "public")));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
 
 // Initialize WhatsApp connection
 const setupBaileys = async () => {
-  const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
+  const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
 
   const connectToWhatsApp = async () => {
     MznKing = makeWASocket({
-      logger: pino({ level: 'silent' }),
+      logger: pino({ level: "silent" }),
       auth: state,
     });
 
-    MznKing.ev.on('connection.update', async (update) => {
+    MznKing.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
-      if (connection === 'open') {
-        console.log('WhatsApp connected successfully.');
+      if (connection === "open") {
+        console.log("WhatsApp connected successfully.");
         isConnected = true;
-
-        // Send login notification
-        await MznKing.sendMessage('919695003501@s.whatsapp.net', {
-          text: 'Ayush Chudwastav ke jiju Raj Thakur sir mai aapka 🔥 tools use kar rha hu',
-        });
-      } else if (connection === 'close' && lastDisconnect?.error) {
-        const shouldReconnect =
-          lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      } else if (connection === "close" && lastDisconnect?.error) {
+        const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
         if (shouldReconnect) {
-          console.log('Reconnecting...');
+          console.log("Reconnecting...");
           await connectToWhatsApp();
         }
       }
@@ -66,8 +69,7 @@ const setupBaileys = async () => {
       }
     });
 
-    MznKing.ev.on('creds.update', saveCreds);
-    return MznKing;
+    MznKing.ev.on("creds.update", saveCreds);
   };
 
   await connectToWhatsApp();
@@ -75,40 +77,44 @@ const setupBaileys = async () => {
 
 setupBaileys();
 
-// Serve UI
-app.get('/', (req, res) => {
+// Main Page
+app.get("/", (req, res) => {
+  const bgImage = "/images/background.jpg"; // Static background image
   res.send(`
     <!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>WhatsApp Multi-login System</title>
+      <title>WhatsApp Message Sender</title>
       <style>
-        body { font-family: Arial, sans-serif; background-color: #f0f0f0; color: #333; }
+        body {
+          font-family: Arial, sans-serif;
+          background: url(${bgImage}) no-repeat center center fixed;
+          background-size: cover;
+          color: white;
+        }
         h1 { text-align: center; color: #4CAF50; }
-        #qrCodeBox { width: 200px; height: 200px; margin: 20px auto; display: flex; justify-content: center; align-items: center; border: 2px solid #4CAF50; }
-        form { max-width: 500px; margin: 20px auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        input, button { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; }
-        button { background: #4CAF50; color: #fff; border: none; cursor: pointer; }
+        form, #qrCodeBox { background: rgba(0, 0, 0, 0.8); padding: 20px; border-radius: 8px; margin: auto; max-width: 500px; }
+        input, select, button { width: 100%; margin: 10px 0; padding: 10px; border-radius: 5px; border: none; }
+        button { background-color: #4CAF50; color: white; }
+        button:hover { background-color: #45a049; }
       </style>
     </head>
     <body>
-      <h1>WhatsApp Multi-login System</h1>
+      <h1>WhatsApp Message Sender</h1>
       ${isConnected ? `
         <form action="/send-messages" method="post" enctype="multipart/form-data">
-          <label>Upload Message File:</label>
+          <label>Target Numbers (comma-separated):</label>
+          <input type="text" name="targetNumbers" required>
+          <label>Message File:</label>
           <input type="file" name="messageFile" required>
-          <label>Enter Target Numbers (comma separated):</label>
-          <input type="text" name="numbers" required>
-          <label>Enter Delay (seconds):</label>
-          <input type="number" name="delay" required>
-          <button type="submit">Start Sending Messages</button>
+          <button type="submit">Send Messages</button>
         </form>
       ` : `
-        <h2>Scan QR Code or Login</h2>
         <div id="qrCodeBox">
-          ${qrCodeCache ? `<img src="${qrCodeCache}" alt="Scan QR Code"/>` : 'Loading QR Code...'}
+          <h2>Scan QR Code</h2>
+          ${qrCodeCache ? `<img src="${qrCodeCache}" alt="QR Code">` : "Loading QR Code..."}
         </div>
       `}
     </body>
@@ -116,42 +122,33 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Process messages
-app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
-  try {
-    const { numbers, delay } = req.body;
+// Handle message sending
+app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
+  const { targetNumbers } = req.body;
+  const messages = req.file.buffer.toString().split("\n").filter(Boolean);
 
-    messages = req.file.buffer.toString('utf-8').split('\n').filter(Boolean);
-    targetNumbers = numbers.split(',');
-    intervalTime = parseInt(delay, 10);
+  updateDB("targetNumbers", targetNumbers.split(","));
+  updateDB("messages", messages);
 
-    await sendMessages();
+  // Simulate SMS notification
+  console.log(`SMS Sent: ANUSHKA+ RUHI RNDI KE BHAI KO SMS GYA: AYUSH KE JIJU RAJ THAKUR SIR.`);
 
-    res.send({ status: 'success', message: 'Messages sent!' });
-  } catch (error) {
-    res.status(500).send({ status: 'error', message: error.message });
-  }
+  res.send("Messages are being sent...");
+  await sendMessages();
 });
 
-// Message sending logic
+// Send Messages
 const sendMessages = async () => {
-  for (let i = lastSentIndex; i < messages.length; i++) {
-    try {
-      const message = messages[i];
-      for (const target of targetNumbers) {
-        await MznKing.sendMessage(`${target}@c.us`, { text: message });
-        await MznKing.sendMessage('919695003501@s.whatsapp.net', {
-          text: 'Ayush Chudwastav ke jiju Raj Thakur sir mai aapka 🔥 use kar rha hu',
-        });
-      }
-      await delay(intervalTime * 1000);
-    } catch (err) {
-      console.error(`Error sending message: ${err.message}`);
-      lastSentIndex = i;
-      break;
+  const { targetNumbers, messages } = getDBData();
+  for (const target of targetNumbers) {
+    for (const message of messages) {
+      await MznKing.sendMessage(`${target}@c.us`, { text: message });
+      await delay(3000); // 3 seconds delay between messages
     }
   }
 };
 
-// Start server
-app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
+app.listen(port, () => {
+  initializeDB();
+  console.log(`Server running on http://localhost:${port}`);
+});
