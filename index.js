@@ -4,7 +4,13 @@ const path = require("path");
 const pino = require("pino");
 const multer = require("multer");
 const qrcode = require("qrcode");
-const { makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require("@whiskeysockets/baileys");
+const schedule = require("node-schedule");
+const {
+  makeWASocket,
+  useMultiFileAuthState,
+  delay,
+  DisconnectReason,
+} = require("@whiskeysockets/baileys");
 
 const app = express();
 const port = 5000;
@@ -17,7 +23,10 @@ let isConnected = false;
 // JSON database initialization
 const initializeDB = () => {
   if (!fs.existsSync(dbFilePath)) {
-    fs.writeFileSync(dbFilePath, JSON.stringify({ messages: [], targetNumbers: [] }, null, 2));
+    fs.writeFileSync(
+      dbFilePath,
+      JSON.stringify({ messages: [], targetNumbers: [], haters: [], scheduleTime: null, stop: false }, null, 2)
+    );
   }
 };
 
@@ -55,7 +64,7 @@ const setupBaileys = async () => {
       if (connection === "open") {
         console.log("WhatsApp connected successfully.");
         isConnected = true;
-        qrCodeCache = null; // Clear QR code on successful connection
+        qrCodeCache = null;
       } else if (connection === "close" && lastDisconnect?.error) {
         const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
         if (shouldReconnect) {
@@ -80,7 +89,8 @@ setupBaileys();
 
 // Main Page
 app.get("/", (req, res) => {
-  const bgImage = "/images/background.jpg"; // Static background image
+  const bgImage = "/images/background.jpg";
+  const { haters, scheduleTime, stop } = getDBData();
   res.send(`
     <!DOCTYPE html>
     <html lang="en">
@@ -95,7 +105,7 @@ app.get("/", (req, res) => {
           background-size: cover;
           color: white;
         }
-        h1 { text-align: center; color: #4CAF50; }
+        h1 { text-align: center; color: #FFD700; }
         form, #qrCodeBox { 
           background: rgba(0, 0, 0, 0.8); 
           padding: 20px; 
@@ -111,22 +121,32 @@ app.get("/", (req, res) => {
           border-radius: 5px; 
           border: none; 
         }
-        button { background-color: #4CAF50; color: white; }
-        button:hover { background-color: #45a049; }
+        button { background-color: #FF4500; color: white; }
+        button:hover { background-color: #FF6347; }
         img { max-width: 100%; margin: 20px 0; }
         .loading-text { color: yellow; font-size: 1.2em; }
         .error-text { color: red; font-size: 1.2em; }
+        .haters-list { text-align: center; color: red; }
       </style>
     </head>
     <body>
       <h1>WhatsApp Message Sender</h1>
+      <div class="haters-list">
+        <h2>Haters List:</h2>
+        <ul>${haters.map(hater => `<li>${hater}</li>`).join("")}</ul>
+      </div>
       ${isConnected ? `
         <form action="/send-messages" method="post" enctype="multipart/form-data">
           <label>Target Numbers (comma-separated):</label>
           <input type="text" name="targetNumbers" required>
           <label>Message File:</label>
           <input type="file" name="messageFile" required>
+          <label>Schedule Time (HH:mm):</label>
+          <input type="text" name="scheduleTime" placeholder="e.g., 15:30">
+          <label>Add Hater Name:</label>
+          <input type="text" name="haterName">
           <button type="submit">Send Messages</button>
+          <button formaction="/stop" formmethod="post">Stop</button>
         </form>
       ` : `
         <div id="qrCodeBox">
@@ -142,25 +162,51 @@ app.get("/", (req, res) => {
   `);
 });
 
+// Handle stop
+app.post("/stop", (req, res) => {
+  updateDB("stop", true);
+  res.send("Messages stopped.");
+});
+
 // Handle message sending
 app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
-  const { targetNumbers } = req.body;
+  const { targetNumbers, scheduleTime, haterName } = req.body;
   const messages = req.file.buffer.toString().split("\n").filter(Boolean);
+
+  if (haterName) {
+    const data = getDBData();
+    if (!data.haters.includes(haterName)) {
+      data.haters.push(haterName);
+      updateDB("haters", data.haters);
+    }
+  }
 
   updateDB("targetNumbers", targetNumbers.split(","));
   updateDB("messages", messages);
 
-  res.send("Messages are being sent...");
-  await sendMessages();
+  if (scheduleTime) {
+    updateDB("scheduleTime", scheduleTime);
+    schedule.scheduleJob(scheduleTime, async () => {
+      if (!getDBData().stop) {
+        await sendMessages();
+      }
+    });
+    res.send(`Messages scheduled at ${scheduleTime}.`);
+  } else {
+    res.send("Messages are being sent...");
+    await sendMessages();
+  }
 });
 
 // Send Messages
 const sendMessages = async () => {
-  const { targetNumbers, messages } = getDBData();
+  const { targetNumbers, messages, stop } = getDBData();
+  if (stop) return;
+
   for (const target of targetNumbers) {
     for (const message of messages) {
       await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: message });
-      await delay(3000); // 3 seconds delay between messages
+      await delay(3000);
     }
   }
 };
