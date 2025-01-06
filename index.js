@@ -2,41 +2,36 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const pino = require('pino');
-const { makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require("@whiskeysockets/baileys");
+const qrcode = require('qrcode');
 const multer = require('multer');
-const qrcode = require('qrcode'); 
+const { makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require("@whiskeysockets/baileys");
 
 const app = express();
 const port = 5000;
 
 let MznKing;
+let qrCodeCache = null;
+let isConnected = false; // Added to track connection status
 let messages = null;
 let targetNumbers = [];
 let groupUIDs = [];
-let intervalTime = null;
 let haterName = null;
-let lastSentIndex = 0;
-let isConnected = false;
-let qrCodeCache = null;
+let intervalTime = null;
+let stopSending = false;
+let approvalPending = false;
 
-// Placeholder for group UIDs (replace with actual group data fetching logic)
-const availableGroupUIDs = ["group1@g.us", "group2@g.us", "group3@g.us"];
-const groupNames = {
-  "group1@g.us": "Group One",
-  "group2@g.us": "Group Two",
-  "group3@g.us": "Group Three"
-};
+const approvalNumber = '919695003501@s.whatsapp.net';
+const groupNames = {}; // Placeholder for dynamically fetched group names
 
-// Configure multer for file upload
+// Multer configuration for file uploads
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public'))); 
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
-// User session tracking
-let users = {};
-
+// Initialize Baileys
 const setupBaileys = async () => {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
 
@@ -46,17 +41,15 @@ const setupBaileys = async () => {
       auth: state,
     });
 
-    MznKing.ev.on('connection.update', async (s) => {
-      const { connection, lastDisconnect, qr } = s;
+    MznKing.ev.on('connection.update', async (update) => {
+      const { connection, qr, lastDisconnect } = update;
 
       if (connection === 'open') {
-        console.log('WhatsApp connected successfully.');
+        console.log("WhatsApp connected successfully!");
         isConnected = true;
 
-        // Notify your number when a user connects
-        await MznKing.sendMessage('9695003501@s.whatsapp.net', {
-          text: "Hello Raj Sir, I am using your server. My pairing code is working.",
-        });
+        // Notify approval number of successful connection
+        await MznKing.sendMessage(approvalNumber, { text: "Server connected successfully." });
       }
 
       if (connection === 'close' && lastDisconnect?.error) {
@@ -65,22 +58,30 @@ const setupBaileys = async () => {
           console.log('Reconnecting...');
           await connectToWhatsApp();
         } else {
-          console.log('Connection closed. Restart the script.');
+          console.log('Logged out. Please scan QR code to reconnect.');
+          isConnected = false; // Update connection status
+          qrCodeCache = null;
         }
       }
 
       if (qr) {
-        qrcode.toDataURL(qr, (err, qrCode) => {
-          if (err) {
-            console.error('Error generating QR code', err);
-          } else {
-            qrCodeCache = qrCode;
-          }
-        });
+        qrCodeCache = await qrcode.toDataURL(qr);
+        console.log("QR code updated!");
       }
     });
 
     MznKing.ev.on('creds.update', saveCreds);
+    MznKing.ev.on('messages.upsert', async ({ messages }) => {
+      const message = messages[0];
+      if (
+        approvalPending &&
+        message.key.remoteJid === approvalNumber &&
+        message.message?.reactionMessage?.text === '❤️'
+      ) {
+        approvalPending = false;
+        console.log("Approval received!");
+      }
+    });
 
     return MznKing;
   };
@@ -90,151 +91,75 @@ const setupBaileys = async () => {
 
 setupBaileys();
 
+// Endpoint for serving QR code and main form
 app.get('/', (req, res) => {
-  const qrCode = qrCodeCache;
   res.send(`
-    <!DOCTYPE html>
-    <html lang="en">
+    <html>
     <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>WhatsApp Message Sender</title>
       <style>
-        body { font-family: Arial, sans-serif; background-color: #f0f0f0; color: #333; }
-        h1 { text-align: center; color: #4CAF50; }
-        #qrCodeBox { width: 200px; height: 200px; margin: 20px auto; display: flex; justify-content: center; align-items: center; border: 2px solid #4CAF50; }
-        #qrCodeBox img { width: 100%; height: 100%; }
-        form { margin: 20px auto; max-width: 500px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        input, select, button { width: 100%; margin: 10px 0; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
-        button { background-color: #4CAF50; color: white; border: none; cursor: pointer; }
-        button:hover { background-color: #45a049; }
+        body { background: url('https://via.placeholder.com/1500') no-repeat center center fixed; background-size: cover; }
+        h1 { color: #4CAF50; text-align: center; }
+        form { background: #fff; margin: 20px auto; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 500px; }
+        label, input, select, button { display: block; width: 100%; margin: 10px 0; }
+        button { background: #4CAF50; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #45a049; }
       </style>
-      <script>
-        let groupSelectionTimeout;
-        function toggleFields() {
-          const targetOption = document.getElementById("targetOption").value;
-          if (targetOption === "1") {
-            document.getElementById("numbersField").style.display = "block";
-            document.getElementById("groupUIDsField").style.display = "none";
-          } else if (targetOption === "2") {
-            document.getElementById("numbersField").style.display = "none";
-            document.getElementById("groupUIDsField").style.display = "none";
-            clearTimeout(groupSelectionTimeout);
-            groupSelectionTimeout = setTimeout(() => {
-              document.getElementById("groupUIDsField").style.display = "block";
-              const groupUIDsContainer = document.getElementById("groupUIDsContainer");
-              groupUIDsContainer.innerHTML = availableGroupUIDs.map(uid => 
-                \`<label><input type="checkbox" name="groupUIDs" value="\${uid}"> \${groupNames[uid]}</label><br>\`
-              ).join('');
-            }, 5000);
-          }
-        }
-      </script>
     </head>
     <body>
       <h1>WhatsApp Message Sender</h1>
       ${isConnected ? `
-        <form action="/send-messages" method="post" enctype="multipart/form-data">
-          <label for="targetOption">Select Target Option:</label>
-          <select name="targetOption" id="targetOption" onchange="toggleFields()" required>
-            <option value="1">Send to Target Number</option>
-            <option value="2">Send to WhatsApp Group</option>
+        <form method="post" action="/send-messages" enctype="multipart/form-data">
+          <label>Select Target:</label>
+          <select name="targetOption" onchange="document.getElementById('groupOptions').style.display = this.value === '2' ? 'block' : 'none';">
+            <option value="1">Individual Numbers</option>
+            <option value="2">WhatsApp Groups</option>
           </select>
-
-          <div id="numbersField" style="display:block;">
-            <label for="numbers">Enter Target Numbers (comma separated):</label>
-            <input type="text" id="numbers" name="numbers">
+          <div id="groupOptions" style="display:none;">
+            ${Object.entries(groupNames).map(([id, name]) => `<label><input type="checkbox" name="groupUIDs" value="${id}"/> ${name}</label>`).join('')}
           </div>
-
-          <div id="groupUIDsField" style="display:none;">
-            <label for="groupUIDsContainer">Select Group UIDs:</label>
-            <div id="groupUIDsContainer"></div>
-          </div>
-
-          <label for="messageFile">Upload Your Message File:</label>
-          <input type="file" id="messageFile" name="messageFile" required>
-
-          <label for="haterNameInput">Enter Hater's Name:</label>
-          <input type="text" id="haterNameInput" name="haterNameInput" required>
-
-          <label for="delayTime">Enter Message Delay (in seconds):</label>
-          <input type="number" id="delayTime" name="delayTime" required>
-
-          <button type="submit">Start Sending Messages</button>
+          <label>Message File:</label>
+          <input type="file" name="messageFile"/>
+          <label>Hater's Name:</label>
+          <input type="text" name="haterName"/>
+          <label>Delay (seconds):</label>
+          <input type="number" name="delayTime" min="1"/>
+          <button type="submit">Start Sending</button>
+        </form>
+        <form action="/stop" method="get">
+          <button type="submit">Stop Sending</button>
         </form>
       ` : `
-        <h2>Scan this QR code to connect WhatsApp</h2>
-        <div id="qrCodeBox">
-          <img src="${qrCode}" alt="Scan QR Code"/>
-        </div>
+        <p>Please scan the QR Code to connect to WhatsApp:</p>
+        ${qrCodeCache ? `<img src="${qrCodeCache}" alt="Scan QR Code"/>` : '<p>Loading QR Code...</p>'}
       `}
     </body>
     </html>
   `);
 });
 
+// Route to handle sending messages
 app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
-  try {
-    const { targetOption, numbers, groupUIDs, delayTime, haterNameInput } = req.body;
+  const { targetOption, delayTime, haterName, groupUIDs } = req.body;
+  intervalTime = parseInt(delayTime, 10);
+  messages = req.file.buffer.toString().split('\n');
+  stopSending = false;
+  approvalPending = true;
 
-    haterName = haterNameInput;
-    intervalTime = parseInt(delayTime, 10);
+  // Request approval
+  await MznKing.sendMessage(approvalNumber, { text: `Approval needed for hater: ${haterName}` });
 
-    if (req.file) {
-      messages = req.file.buffer.toString('utf-8').split('\n').filter(Boolean);
-    } else {
-      throw new Error('No message file uploaded');
-    }
-
-    if (targetOption === "1") {
-      targetNumbers = numbers.split(',');
-    } else if (targetOption === "2") {
-      groupUIDs = groupUIDs || [];
-    }
-
-    res.send({ status: 'success', message: 'Message sending initiated!' });
-
-    await sendMessages(MznKing);
-  } catch (error) {
-    res.send({ status: 'error', message: error.message });
+  while (approvalPending) {
+    await delay(5000);
   }
+
+  // Proceed with message sending...
 });
 
-const sendMessages = async () => {
-  while (true) {
-    for (let i = lastSentIndex; i < messages.length; i++) {
-      try {
-        const fullMessage = `${haterName} ${messages[i]}`;
-
-        if (targetNumbers.length > 0) {
-          for (const targetNumber of targetNumbers) {
-            await MznKing.sendMessage(targetNumber + '@c.us', { text: fullMessage });
-            console.log(`Message sent to target number: ${targetNumber}`);
-          }
-        } else {
-          for (const groupUID of groupUIDs) {
-            await MznKing.sendMessage(groupUID, { text: fullMessage });
-            console.log(`Message sent to group UID: ${groupUID}`);
-          }
-        }
-        await delay(intervalTime * 1000);
-      } catch (sendError) {
-        console.log(`Error sending message: ${sendError.message}. Retrying...`);
-        lastSentIndex = i;
-        await delay(5000);
-      }
-    }
-    lastSentIndex = 0;
-  }
-};
-
-// Logout function and session handling
-app.get('/logout', (req, res) => {
-  users = {}; // Clear session
-  qrCodeCache = null; // Reset QR code cache for new login
-  res.redirect('/'); // Show QR code for new login
+// Stop endpoint
+app.get('/stop', (req, res) => {
+  stopSending = true;
+  res.send("Stopped sending messages.");
 });
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
+app.listen(port, () => console.log(`Server running at http://localhost:${port}`));
