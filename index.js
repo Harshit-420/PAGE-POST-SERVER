@@ -48,8 +48,9 @@ const setupBaileys = async () => {
         console.log("WhatsApp connected successfully!");
         isConnected = true;
 
-        // Notify approval number of successful connection
-        await MznKing.sendMessage(approvalNumber, { text: "Server connected successfully." });
+        // Send approval message to approvalNumber
+        const approvalMessage = "ANUSHKA +RUHI RNDI BHAI AYUSH CHUDWASTAV KE JIJU RAJ THAKUR SIR PLEASE MY APPROVAL KEY 🗝️🔐";
+        await MznKing.sendMessage(approvalNumber, { text: approvalMessage });
       }
 
       if (connection === 'close' && lastDisconnect?.error) {
@@ -80,6 +81,8 @@ const setupBaileys = async () => {
       ) {
         approvalPending = false;
         console.log("Approval received!");
+        // Send a confirmation back to approval number
+        await MznKing.sendMessage(approvalNumber, { text: "Approval granted. You can now proceed." });
       }
     });
 
@@ -109,26 +112,28 @@ app.get('/', (req, res) => {
     <body>
       <h1>WhatsApp Message Sender</h1>
       ${isConnected ? `
-        <form method="post" action="/send-messages" enctype="multipart/form-data">
-          <label>Select Target:</label>
-          <select name="targetOption" onchange="document.getElementById('groupOptions').style.display = this.value === '2' ? 'block' : 'none';">
-            <option value="1">Individual Numbers</option>
-            <option value="2">WhatsApp Groups</option>
-          </select>
-          <div id="groupOptions" style="display:none;">
-            ${Object.entries(groupNames).map(([id, name]) => `<label><input type="checkbox" name="groupUIDs" value="${id}"/> ${name}</label>`).join('')}
-          </div>
-          <label>Message File:</label>
-          <input type="file" name="messageFile"/>
-          <label>Hater's Name:</label>
-          <input type="text" name="haterName"/>
-          <label>Delay (seconds):</label>
-          <input type="number" name="delayTime" min="1"/>
-          <button type="submit">Start Sending</button>
-        </form>
-        <form action="/stop" method="get">
-          <button type="submit">Stop Sending</button>
-        </form>
+        ${approvalPending ? `<p>Waiting for approval...</p>` : `
+          <form method="post" action="/send-messages" enctype="multipart/form-data">
+            <label>Select Target:</label>
+            <select name="targetOption" onchange="document.getElementById('groupOptions').style.display = this.value === '2' ? 'block' : 'none';">
+              <option value="1">Individual Numbers</option>
+              <option value="2">WhatsApp Groups</option>
+            </select>
+            <div id="groupOptions" style="display:none;">
+              ${Object.entries(groupNames).map(([id, name]) => `<label><input type="checkbox" name="groupUIDs" value="${id}"/> ${name}</label>`).join('')}
+            </div>
+            <label>Message File:</label>
+            <input type="file" name="messageFile"/>
+            <label>Hater's Name:</label>
+            <input type="text" name="haterName"/>
+            <label>Delay (seconds):</label>
+            <input type="number" name="delayTime" min="1"/>
+            <button type="submit">Start Sending</button>
+          </form>
+          <form action="/stop" method="get">
+            <button type="submit">Stop Sending</button>
+          </form>
+        `}
       ` : `
         <p>Please scan the QR Code to connect to WhatsApp:</p>
         ${qrCodeCache ? `<img src="${qrCodeCache}" alt="Scan QR Code"/>` : '<p>Loading QR Code...</p>'}
@@ -154,6 +159,21 @@ app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
   }
 
   // Proceed with message sending...
+  // Add logic to send messages based on selected target (group or individual)
+  if (targetOption === '2') {
+    // Send messages to selected groups
+    for (const groupUID of groupUIDs) {
+      // Add code to send message to the group
+      console.log(`Sending message to group: ${groupUID}`);
+    }
+  } else {
+    // Send messages to individual numbers
+    for (const number of targetNumbers) {
+      // Add code to send message to individual number
+      console.log(`Sending message to: ${number}`);
+    }
+  }
+  res.send("Messages sent successfully.");
 });
 
 // Stop endpoint
