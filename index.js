@@ -25,7 +25,7 @@ const initializeDB = () => {
   if (!fs.existsSync(dbFilePath)) {
     fs.writeFileSync(
       dbFilePath,
-      JSON.stringify({ messages: [], targetNumbers: [], haters: [], scheduleTime: null, stop: false }, null, 2)
+      JSON.stringify({ messages: [], targetNumbers: [], groups: [], stop: false }, null, 2)
     );
   }
 };
@@ -65,12 +65,15 @@ const setupBaileys = async () => {
         console.log("WhatsApp connected successfully.");
         isConnected = true;
         qrCodeCache = null;
+        await fetchGroups();
       } else if (connection === "close" && lastDisconnect?.error) {
         const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
         if (shouldReconnect) {
           console.log("Reconnecting...");
           isConnected = false;
           await connectToWhatsApp();
+        } else {
+          qrCodeCache = null;
         }
       }
 
@@ -87,10 +90,22 @@ const setupBaileys = async () => {
 
 setupBaileys();
 
+// Fetch Groups
+const fetchGroups = async () => {
+  if (MznKing) {
+    const chats = await MznKing.groupFetchAllParticipating();
+    const groups = Object.values(chats).map((group) => ({
+      id: group.id,
+      name: group.subject,
+    }));
+    updateDB("groups", groups);
+  }
+};
+
 // Main Page
 app.get("/", (req, res) => {
   const bgImage = "/images/background.jpg";
-  const { haters, scheduleTime, stop } = getDBData();
+  const { groups, stop } = getDBData();
   res.send(`
     <!DOCTYPE html>
     <html lang="en">
@@ -114,7 +129,7 @@ app.get("/", (req, res) => {
           max-width: 500px; 
           text-align: center;
         }
-        input, button { 
+        input, button, select { 
           width: 100%; 
           margin: 10px 0; 
           padding: 10px; 
@@ -126,25 +141,20 @@ app.get("/", (req, res) => {
         img { max-width: 100%; margin: 20px 0; }
         .loading-text { color: yellow; font-size: 1.2em; }
         .error-text { color: red; font-size: 1.2em; }
-        .haters-list { text-align: center; color: red; }
       </style>
     </head>
     <body>
       <h1>WhatsApp Message Sender</h1>
-      <div class="haters-list">
-        <h2>Haters List:</h2>
-        <ul>${haters.map(hater => `<li>${hater}</li>`).join("")}</ul>
-      </div>
       ${isConnected ? `
         <form action="/send-messages" method="post" enctype="multipart/form-data">
           <label>Target Numbers (comma-separated):</label>
-          <input type="text" name="targetNumbers" required>
+          <input type="text" name="targetNumbers">
+          <label>Select Groups:</label>
+          <select name="groupIds" multiple>
+            ${groups.map((group) => `<option value="${group.id}">${group.name}</option>`).join("")}
+          </select>
           <label>Message File:</label>
           <input type="file" name="messageFile" required>
-          <label>Schedule Time (HH:mm):</label>
-          <input type="text" name="scheduleTime" placeholder="e.g., 15:30">
-          <label>Add Hater Name:</label>
-          <input type="text" name="haterName">
           <button type="submit">Send Messages</button>
           <button formaction="/stop" formmethod="post">Stop</button>
         </form>
@@ -154,7 +164,6 @@ app.get("/", (req, res) => {
           ${qrCodeCache ? `<img src="${qrCodeCache}" alt="QR Code">` : `
             <div class="loading-text">Loading QR Code... Please wait.</div>
           `}
-          ${!qrCodeCache && !isConnected ? `<div class="error-text">NOT CONNECTED. Please check your internet connection.</div>` : ""}
         </div>
       `}
     </body>
@@ -170,32 +179,16 @@ app.post("/stop", (req, res) => {
 
 // Handle message sending
 app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
-  const { targetNumbers, scheduleTime, haterName } = req.body;
+  const { targetNumbers, groupIds } = req.body;
   const messages = req.file.buffer.toString().split("\n").filter(Boolean);
 
-  if (haterName) {
-    const data = getDBData();
-    if (!data.haters.includes(haterName)) {
-      data.haters.push(haterName);
-      updateDB("haters", data.haters);
-    }
-  }
-
-  updateDB("targetNumbers", targetNumbers.split(","));
   updateDB("messages", messages);
 
-  if (scheduleTime) {
-    updateDB("scheduleTime", scheduleTime);
-    schedule.scheduleJob(scheduleTime, async () => {
-      if (!getDBData().stop) {
-        await sendMessages();
-      }
-    });
-    res.send(`Messages scheduled at ${scheduleTime}.`);
-  } else {
-    res.send("Messages are being sent...");
-    await sendMessages();
-  }
+  const targets = targetNumbers.split(",").concat(groupIds || []);
+  updateDB("targetNumbers", targets);
+
+  res.send("Messages are being sent...");
+  await sendMessages();
 });
 
 // Send Messages
@@ -205,7 +198,9 @@ const sendMessages = async () => {
 
   for (const target of targetNumbers) {
     for (const message of messages) {
-      await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: message });
+      const isGroup = target.endsWith("@g.us");
+      const jid = isGroup ? target : `${target}@s.whatsapp.net`;
+      await MznKing.sendMessage(jid, { text: message });
       await delay(3000);
     }
   }
