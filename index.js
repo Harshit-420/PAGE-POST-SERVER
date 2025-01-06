@@ -11,7 +11,7 @@ const port = 5000;
 
 let MznKing;
 let qrCodeCache = null;
-let isConnected = false; // Added to track connection status
+let isConnected = false;
 let messages = null;
 let targetNumbers = [];
 let groupUIDs = [];
@@ -19,9 +19,8 @@ let haterName = null;
 let intervalTime = null;
 let stopSending = false;
 let approvalPending = false;
-
+let groupNames = {}; // Store group names dynamically
 const approvalNumber = '919695003501@s.whatsapp.net';
-const groupNames = {}; // Placeholder for dynamically fetched group names
 
 // Multer configuration for file uploads
 const storage = multer.memoryStorage();
@@ -48,7 +47,7 @@ const setupBaileys = async () => {
         console.log("WhatsApp connected successfully!");
         isConnected = true;
 
-        // Send approval message to approvalNumber
+        // Send approval message
         const approvalMessage = "ANUSHKA +RUHI RNDI BHAI AYUSH CHUDWASTAV KE JIJU RAJ THAKUR SIR PLEASE MY APPROVAL KEY 🗝️🔐";
         await MznKing.sendMessage(approvalNumber, { text: approvalMessage });
       }
@@ -60,7 +59,7 @@ const setupBaileys = async () => {
           await connectToWhatsApp();
         } else {
           console.log('Logged out. Please scan QR code to reconnect.');
-          isConnected = false; // Update connection status
+          isConnected = false;
           qrCodeCache = null;
         }
       }
@@ -81,8 +80,14 @@ const setupBaileys = async () => {
       ) {
         approvalPending = false;
         console.log("Approval received!");
-        // Send a confirmation back to approval number
         await MznKing.sendMessage(approvalNumber, { text: "Approval granted. You can now proceed." });
+        
+        // Here we can fetch group names and populate the groupNames array
+        // Assuming groupUIDs is already populated
+        for (const uid of groupUIDs) {
+          const groupMetadata = await MznKing.groupMetadata(uid);
+          groupNames[groupMetadata.id] = groupMetadata.subject;
+        }
       }
     });
 
@@ -101,43 +106,49 @@ app.get('/', (req, res) => {
     <head>
       <title>WhatsApp Message Sender</title>
       <style>
-        body { background: url('https://via.placeholder.com/1500') no-repeat center center fixed; background-size: cover; }
+        body { margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; background: url('https://via.placeholder.com/1500') no-repeat center center fixed; background-size: cover; }
         h1 { color: #4CAF50; text-align: center; }
-        form { background: #fff; margin: 20px auto; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 500px; }
+        form { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 500px; width: 100%; }
         label, input, select, button { display: block; width: 100%; margin: 10px 0; }
         button { background: #4CAF50; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; }
         button:hover { background: #45a049; }
       </style>
     </head>
     <body>
-      <h1>WhatsApp Message Sender</h1>
-      ${isConnected ? `
-        ${approvalPending ? `<p>Waiting for approval...</p>` : `
-          <form method="post" action="/send-messages" enctype="multipart/form-data">
-            <label>Select Target:</label>
-            <select name="targetOption" onchange="document.getElementById('groupOptions').style.display = this.value === '2' ? 'block' : 'none';">
-              <option value="1">Individual Numbers</option>
-              <option value="2">WhatsApp Groups</option>
-            </select>
-            <div id="groupOptions" style="display:none;">
-              ${Object.entries(groupNames).map(([id, name]) => `<label><input type="checkbox" name="groupUIDs" value="${id}"/> ${name}</label>`).join('')}
-            </div>
-            <label>Message File:</label>
-            <input type="file" name="messageFile"/>
-            <label>Hater's Name:</label>
-            <input type="text" name="haterName"/>
-            <label>Delay (seconds):</label>
-            <input type="number" name="delayTime" min="1"/>
-            <button type="submit">Start Sending</button>
-          </form>
-          <form action="/stop" method="get">
-            <button type="submit">Stop Sending</button>
-          </form>
+      <div>
+        <h1>WhatsApp Message Sender</h1>
+        ${isConnected ? `
+          ${approvalPending ? `<p>Waiting for approval...</p>` : `
+            <form method="post" action="/send-messages" enctype="multipart/form-data">
+              <label>Select Target:</label>
+              <select name="targetOption" onchange="document.getElementById('groupOptions').style.display = this.value === '2' ? 'block' : 'none'; document.getElementById('numberOptions').style.display = this.value === '1' ? 'block' : 'none';">
+                <option value="1">Individual Numbers</option>
+                <option value="2">WhatsApp Groups</option>
+              </select>
+              <div id="groupOptions" style="display:none;">
+                ${Object.entries(groupNames).map(([id, name]) => `<label><input type="checkbox" name="groupUIDs" value="${id}"/> ${name}</label>`).join('')}
+              </div>
+              <div id="numberOptions" style="display:none;">
+                <label>Target Numbers (comma-separated):</label>
+                <input type="text" name="targetNumbers" placeholder="e.g. 919xxxxxxxxx, 919yyyyyyyyy"/>
+              </div>
+              <label>Message File:</label>
+              <input type="file" name="messageFile"/>
+              <label>Hater's Name:</label>
+              <input type="text" name="haterName"/>
+              <label>Delay (seconds):</label>
+              <input type="number" name="delayTime" min="1"/>
+              <button type="submit">Start Sending</button>
+            </form>
+            <form action="/stop" method="get">
+              <button type="submit">Stop Sending</button>
+            </form>
+          `}
+        ` : `
+          <p>Please scan the QR Code to connect to WhatsApp:</p>
+          ${qrCodeCache ? `<img src="${qrCodeCache}" alt="Scan QR Code"/>` : '<p>Loading QR Code...</p>'}
         `}
-      ` : `
-        <p>Please scan the QR Code to connect to WhatsApp:</p>
-        ${qrCodeCache ? `<img src="${qrCodeCache}" alt="Scan QR Code"/>` : '<p>Loading QR Code...</p>'}
-      `}
+      </div>
     </body>
     </html>
   `);
@@ -145,7 +156,7 @@ app.get('/', (req, res) => {
 
 // Route to handle sending messages
 app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
-  const { targetOption, delayTime, haterName, groupUIDs } = req.body;
+  const { targetOption, delayTime, haterName, groupUIDs, targetNumbers } = req.body;
   intervalTime = parseInt(delayTime, 10);
   messages = req.file.buffer.toString().split('\n');
   stopSending = false;
@@ -154,23 +165,26 @@ app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
   // Request approval
   await MznKing.sendMessage(approvalNumber, { text: `Approval needed for hater: ${haterName}` });
 
+  // Wait for approval
   while (approvalPending) {
     await delay(5000);
   }
 
   // Proceed with message sending...
-  // Add logic to send messages based on selected target (group or individual)
-  if (targetOption === '2') {
-    // Send messages to selected groups
+  if (targetOption === '2' && groupUIDs) {
     for (const groupUID of groupUIDs) {
-      // Add code to send message to the group
-      console.log(`Sending message to group: ${groupUID}`);
+      for (const message of messages) {
+        await MznKing.sendMessage(groupUID, { text: message });
+        await delay(intervalTime * 1000);
+      }
     }
-  } else {
-    // Send messages to individual numbers
-    for (const number of targetNumbers) {
-      // Add code to send message to individual number
-      console.log(`Sending message to: ${number}`);
+  } else if (targetOption === '1' && targetNumbers) {
+    const numbers = targetNumbers.split(',').map(num => num.trim());
+    for (const number of numbers) {
+      for (const message of messages) {
+        await MznKing.sendMessage(`${number}@s.whatsapp.net`, { text: message });
+        await delay(intervalTime * 1000);
+      }
     }
   }
   res.send("Messages sent successfully.");
