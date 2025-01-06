@@ -1,3 +1,14 @@
-"scripts": {
-  "start": "node index.js"
+{
+  "name": "your-project-name",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "node-schedule": "^2.1.0",
+    "qrcode": "^1.4.4"
+  },
+  "engines": {
+    "node": "16.x"
+  }
 }
