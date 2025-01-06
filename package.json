@@ -15,7 +15,6 @@
     "sweetalert": "^2.1.2"
   },
   "scripts": {
-    "install-deps": "npm install",  // This script will install all dependencies
     "start": "node index.js"
   },
   "engines": {
