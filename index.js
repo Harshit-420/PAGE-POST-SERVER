@@ -4,7 +4,7 @@ const path = require('path');
 const pino = require('pino');
 const qrcode = require('qrcode');
 const multer = require('multer');
-const { makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require("@whiskeysockets/baileys");
+const { makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require('@whiskeysockets/baileys');
 
 const app = express();
 const port = 5000;
@@ -176,6 +176,7 @@ app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
   if (targetOption === '2' && groupUIDs) {
     for (const groupUID of groupUIDs) {
       for (const message of messages) {
+        if (stopSending) break;
         await MznKing.sendMessage(groupUID, { text: message });
         await delay(intervalTime * 1000);
       }
@@ -184,6 +185,7 @@ app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
     const numbers = targetNumbers.split(',').map(num => num.trim());
     for (const number of numbers) {
       for (const message of messages) {
+        if (stopSending) break;
         await MznKing.sendMessage(`${number}@s.whatsapp.net`, { text: message });
         await delay(intervalTime * 1000);
       }
