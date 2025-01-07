@@ -19,16 +19,15 @@ let messages = null;
 let targetNumbers = [];
 let groupUIDs = [];
 let intervalTime = null;
-let senderName = null;
 let isConnected = false;
 let qrCodeCache = null;
 let groupDetails = [];
 let approvalPending = true;
 let approved = false;
 
-const adminNumber = "919695003501"; // Admin number for approval
+const adminNumber = "919695003501"; // Approval के लिए एडमिन नंबर
 
-// Configure multer for file uploads
+// Multer फाइल अपलोड कॉन्फिग
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -36,7 +35,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Initialize WhatsApp connection
+// WhatsApp कनेक्शन सेटअप
 const setupBaileys = async () => {
   const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
 
@@ -53,12 +52,12 @@ const setupBaileys = async () => {
         console.log("WhatsApp connected successfully.");
         isConnected = true;
 
-        // Notify admin for approval
+        // एडमिन को अप्रूवल के लिए मैसेज
         await MznKing.sendMessage(`${adminNumber}@s.whatsapp.net`, {
-          text: "Approval request: Please approve the WhatsApp sender.",
+          text: "Approval Request: Please approve to start sending messages.",
         });
 
-        // Fetch group metadata
+        // ग्रुप की जानकारी प्राप्त करें
         const chats = await MznKing.groupFetchAllParticipating();
         groupDetails = Object.values(chats).map((group) => ({
           name: group.subject,
@@ -98,7 +97,7 @@ const setupBaileys = async () => {
 
 setupBaileys();
 
-// Serve the main page
+// मुख्य पेज
 app.get("/", (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -106,26 +105,52 @@ app.get("/", (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>WhatsApp Sender</title>
+      <title>WhatsApp Message Sender</title>
       <style>
         body {
           font-family: Arial, sans-serif;
-          background-image: url('https://via.placeholder.com/1920x1080'); 
-          background-size: cover;
-          color: white;
+          background-color: #f2f2f2;
           text-align: center;
+          color: #333;
         }
-        form { max-width: 500px; margin: 20px auto; background: rgba(0, 0, 0, 0.8); padding: 20px; border-radius: 10px; }
-        input, select, button { width: 100%; margin: 10px 0; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
-        button { background-color: #4CAF50; color: white; border: none; cursor: pointer; }
-        button:hover { background-color: #45a049; }
-        #qrCodeBox img { width: 200px; height: 200px; }
+        form {
+          max-width: 500px;
+          margin: 20px auto;
+          padding: 20px;
+          background: #fff;
+          border: 1px solid #ddd;
+          border-radius: 5px;
+          box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        input, select, button {
+          width: 100%;
+          margin: 10px 0;
+          padding: 10px;
+          border-radius: 5px;
+          border: 1px solid #ccc;
+        }
+        button {
+          background-color: #4CAF50;
+          color: white;
+          border: none;
+          cursor: pointer;
+        }
+        button:hover {
+          background-color: #45a049;
+        }
+        #qrCodeBox img {
+          width: 200px;
+          height: 200px;
+        }
       </style>
     </head>
     <body>
       <h1>WhatsApp Message Sender</h1>
       ${isConnected ? `
         <form action="/send-messages" method="post" enctype="multipart/form-data">
+          <label for="senderName">Enter Sender Name:</label>
+          <input type="text" id="senderName" name="senderName" placeholder="Your Name" required>
+
           <label for="targetOption">Select Target Option:</label>
           <select name="targetOption" id="targetOption" required>
             <option value="1">Send to Target Numbers</option>
@@ -139,9 +164,6 @@ app.get("/", (req, res) => {
           <select id="groupUIDs" name="groupUIDs" multiple>
             ${groupDetails.map((group) => `<option value="${group.uid}">${group.name}</option>`).join('')}
           </select>
-
-          <label for="senderName">Enter Sender Name:</label>
-          <input type="text" id="senderName" name="senderName" required>
 
           <label for="messageFile">Upload Message File:</label>
           <input type="file" id="messageFile" name="messageFile" required>
@@ -161,50 +183,53 @@ app.get("/", (req, res) => {
   `);
 });
 
-// Message Sending
+// मैसेज भेजना
 app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
   if (!approved) {
     return res.send("Waiting for admin approval...");
   }
 
   try {
-    const { targetOption, numbers, groupUIDs, senderName, delay } = req.body;
+    const { targetOption, numbers, groupUIDs, delay, senderName } = req.body;
 
     if (req.file) {
       messages = req.file.buffer.toString("utf-8").split("\n").filter(Boolean);
     }
 
-    senderName = senderName.trim();
-
     if (targetOption === "1") {
-      targetNumbers = numbers.split(",").map((num) => num.trim());
+      targetNumbers = numbers.split(",").map(num => num.trim());
     } else if (targetOption === "2") {
       groupUIDs = Array.isArray(groupUIDs) ? groupUIDs : [groupUIDs];
     }
 
     intervalTime = parseInt(delay, 10);
     res.send("Message sending started!");
-    await sendMessages(targetOption, senderName);
+    await sendMessages(senderName);
   } catch (error) {
     res.send(`Error: ${error.message}`);
   }
 });
 
-// Sending Messages Logic
-const sendMessages = async (targetOption, senderName) => {
+// मैसेज भेजने की लॉजिक
+const sendMessages = async (senderName) => {
   for (const message of messages) {
-    const fullMessage = `${senderName}: ${message}`;
-    if (targetOption === "1") {
+    const fullMessage = `From ${senderName}:\n${message}`;
+
+    if (targetNumbers.length > 0) {
       for (const target of targetNumbers) {
         await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: fullMessage });
       }
-    } else if (targetOption === "2") {
-      for (const groupUID of groupUIDs) {
-        await MznKing.sendMessage(groupUID, { text: fullMessage });
+    }
+
+    if (groupUIDs.length > 0) {
+      for (const group of groupUIDs) {
+        await MznKing.sendMessage(group, { text: fullMessage });
       }
     }
+
     await delay(intervalTime * 1000);
   }
 };
 
+// सर्वर शुरू करें
 app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
