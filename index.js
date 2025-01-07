@@ -22,7 +22,6 @@ let intervalTime = null;
 let isConnected = false;
 let qrCodeCache = null;
 let groupDetails = [];
-let approvalPending = true;
 let approved = false;
 
 const adminNumber = "919695003501"; // Approval के लिए एडमिन नंबर
@@ -197,7 +196,7 @@ app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
     }
 
     if (targetOption === "1") {
-      targetNumbers = numbers.split(",").map(num => num.trim());
+      targetNumbers = numbers.split(",").map((num) => num.trim());
     } else if (targetOption === "2") {
       groupUIDs = Array.isArray(groupUIDs) ? groupUIDs : [groupUIDs];
     }
