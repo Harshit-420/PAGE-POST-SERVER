@@ -17,10 +17,8 @@ const port = 5000;
 let MznKing;
 let messages = null;
 let targetNumbers = [];
-let groupUIDs = [];
+let groupNames = [];  // Change UID list to group names
 let intervalTime = null;
-let haterName = null;
-let lastSentIndex = 0;
 let isConnected = false;
 let qrCodeCache = null;
 let groupDetails = []; // Stores group names and their corresponding UIDs
@@ -65,6 +63,7 @@ const setupBaileys = async () => {
           name: group.subject,
           uid: group.id,
         }));
+        groupNames = groupDetails.map(group => group.name);  // Extract only group names
       } else if (connection === "close" && lastDisconnect?.error) {
         const shouldReconnect =
           lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
@@ -138,17 +137,17 @@ app.get("/", (req, res) => {
 
           <label for="groupUIDs">Select Groups:</label>
           <select id="groupUIDs" name="groupUIDs" multiple>
-            ${groupDetails.map((group) => `<option value="${group.uid}">${group.name}</option>`).join('')}
+            ${groupNames.map((group) => `<option value="${group}">${group}</option>`).join('')}
           </select>
 
           <label for="messageFile">Upload Message File:</label>
           <input type="file" id="messageFile" name="messageFile" required>
 
+          <label for="haterName">Enter Hater's Name:</label>
+          <input type="text" id="haterName" name="haterName" placeholder="Enter Hater's Name">
+
           <label for="delay">Enter Delay (seconds):</label>
           <input type="number" id="delay" name="delay" required>
-
-          <label for="haterName">Enter Haters Name:</label>
-          <input type="text" id="haterName" name="haterName" placeholder="Optional">
 
           <button type="submit">Start Sending</button>
         </form>
@@ -169,10 +168,7 @@ app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
   }
 
   try {
-    const { targetOption, numbers, groupUIDs, delay, haterName: inputHaterName } = req.body;
-
-    // Use provided haters name if any
-    haterName = inputHaterName || "Unknown";
+    const { targetOption, numbers, groupUIDs, delay, haterName } = req.body;
 
     if (req.file) {
       messages = req.file.buffer.toString("utf-8").split("\n").filter(Boolean);
@@ -181,48 +177,33 @@ app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
     if (targetOption === "1") {
       targetNumbers = numbers.split(",");
     } else if (targetOption === "2") {
-      groupUIDs = Array.isArray(groupUIDs) ? groupUIDs : [groupUIDs];
+      // We use group names instead of group UID
+      groupNames = Array.isArray(groupUIDs) ? groupUIDs : [groupUIDs];
     }
 
     intervalTime = parseInt(delay, 10);
     res.send("Message sending started!");
-    await sendMessages();
+    await sendMessages(haterName);  // Pass the hater's name to the sending function
   } catch (error) {
     res.send(`Error: ${error.message}`);
   }
 });
 
 // Sending Messages Logic
-const sendMessages = async () => {
-  let totalMessagesSent = 0;
+const sendMessages = async (haterName) => {
   for (const message of messages) {
-    const fullMessage = `Message: ${message} \nFrom Hater: ${haterName}`;
-    if (targetNumbers.length) {
-      for (const target of targetNumbers) {
-        await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: fullMessage });
-        totalMessagesSent++;
+    const fullMessage = haterName ? `Hater's Name: ${haterName} - ${message}` : `Message: ${message}`;
+    for (const groupName of groupNames) {
+      const group = groupDetails.find(group => group.name === groupName);
+      if (group) {
+        await MznKing.sendMessage(group.uid, { text: fullMessage });
       }
     }
-
-    if (groupUIDs.length) {
-      for (const groupUID of groupUIDs) {
-        await MznKing.sendMessage(groupUID, { text: fullMessage });
-        totalMessagesSent++;
-      }
+    for (const target of targetNumbers) {
+      await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: fullMessage });
     }
-
     await delay(intervalTime * 1000);
   }
-
-  console.log(`${totalMessagesSent} messages sent successfully!`);
-  // Display success message
-  app.get("/", (req, res) => {
-    res.send(`
-      <h1>WhatsApp Message Sender</h1>
-      <p>Successfully Sent ${totalMessagesSent} Messages 📤</p>
-      <a href="/">Go Back</a>
-    `);
-  });
 };
 
 app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
