@@ -82,8 +82,7 @@ const setupBaileys = async () => {
         console.log("Approval received!");
         await MznKing.sendMessage(approvalNumber, { text: "Approval granted. You can now proceed." });
         
-        // Here we can fetch group names and populate the groupNames array
-        // Assuming groupUIDs is already populated
+        // Fetch group names and populate the groupNames array
         for (const uid of groupUIDs) {
           const groupMetadata = await MznKing.groupMetadata(uid);
           groupNames[groupMetadata.id] = groupMetadata.subject;
