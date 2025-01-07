@@ -107,45 +107,48 @@ app.get('/', (req, res) => {
       <title>WhatsApp Message Sender</title>
       <style>
         body { margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; background: url('https://via.placeholder.com/1500') no-repeat center center fixed; background-size: cover; }
-        h1 { color: #4CAF50; text-align: center; }
-        form { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 500px; width: 100%; }
-        label, input, select, button { display: block; width: 100%; margin: 10px 0; }
-        button { background: #4CAF50; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; }
+        h1 { color: #4CAF50; text-align: center; font-size: 2rem; }
+        form { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 600px; width: 100%; }
+        label, input, select, button { display: block; width: 100%; margin: 15px 0; font-size: 1.2rem; }
+        button { background: #4CAF50; color: white; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 1.2rem; }
         button:hover { background: #45a049; }
+        textarea { width: 100%; height: 180px; padding: 12px; font-size: 1.2rem; border-radius: 8px; border: 1px solid #ddd; }
+        input[type="file"], input[type="text"], input[type="number"], select { padding: 12px; font-size: 1.2rem; border-radius: 8px; border: 1px solid #ddd; }
+        select { padding: 12px; font-size: 1.2rem; border-radius: 8px; border: 1px solid #ddd; }
       </style>
     </head>
     <body>
       <div>
-        <h1>WhatsApp Message Sender</h1>
+        <h1>WhatsApp Message Sender 🚀</h1>
         ${isConnected ? `
           ${approvalPending ? `<p>Waiting for approval...</p>` : `
             <form method="post" action="/send-messages" enctype="multipart/form-data">
-              <label>Select Target:</label>
-              <select name="targetOption" onchange="document.getElementById('groupOptions').style.display = this.value === '2' ? 'block' : 'none'; document.getElementById('numberOptions').style.display = this.value === '1' ? 'block' : 'none';">
-                <option value="1">Individual Numbers</option>
-                <option value="2">WhatsApp Groups</option>
+              <label for="targetOption">Select Target:</label>
+              <select id="targetOption" name="targetOption" onchange="document.getElementById('groupOptions').style.display = this.value === '2' ? 'block' : 'none'; document.getElementById('numberOptions').style.display = this.value === '1' ? 'block' : 'none';">
+                <option value="1">Individual Numbers 📞</option>
+                <option value="2">WhatsApp Groups 👥</option>
               </select>
               <div id="groupOptions" style="display:none;">
                 ${Object.entries(groupNames).map(([id, name]) => `<label><input type="checkbox" name="groupUIDs" value="${id}"/> ${name}</label>`).join('')}
               </div>
               <div id="numberOptions" style="display:none;">
-                <label>Target Numbers (comma-separated):</label>
-                <input type="text" name="targetNumbers" placeholder="e.g. 919xxxxxxxxx, 919yyyyyyyyy"/>
+                <label for="targetNumbers">Target Numbers (comma-separated):</label>
+                <input type="text" id="targetNumbers" name="targetNumbers" placeholder="e.g. 919xxxxxxxxx, 919yyyyyyyyy"/>
               </div>
-              <label>Message File:</label>
-              <input type="file" name="messageFile"/>
-              <label>Hater's Name:</label>
-              <input type="text" name="haterName"/>
-              <label>Delay (seconds):</label>
-              <input type="number" name="delayTime" min="1"/>
-              <button type="submit">Start Sending</button>
+              <label for="messageFile">Message File:</label>
+              <input type="file" id="messageFile" name="messageFile"/>
+              <label for="haterName">Hater's Name (for context):</label>
+              <input type="text" id="haterName" name="haterName"/>
+              <label for="delayTime">Delay (seconds):</label>
+              <input type="number" id="delayTime" name="delayTime" min="1"/>
+              <button type="submit">Start Sending ✨</button>
             </form>
             <form action="/stop" method="get">
-              <button type="submit">Stop Sending</button>
+              <button type="submit">Stop Sending ❌</button>
             </form>
           `}
         ` : `
-          <p>Please scan the QR Code to connect to WhatsApp:</p>
+          <p>Please scan the QR Code to connect to WhatsApp 🕵️‍♂️:</p>
           ${qrCodeCache ? `<img src="${qrCodeCache}" alt="Scan QR Code"/>` : '<p>Loading QR Code...</p>'}
         `}
       </div>
@@ -187,13 +190,13 @@ app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
       }
     }
   }
-  res.send("Messages sent successfully.");
+  res.send("Messages sent successfully. 🎉");
 });
 
 // Stop endpoint
 app.get('/stop', (req, res) => {
   stopSending = true;
-  res.send("Stopped sending messages.");
+  res.send("Stopped sending messages. ❌");
 });
 
 app.listen(port, () => console.log(`Server running at http://localhost:${port}`));
