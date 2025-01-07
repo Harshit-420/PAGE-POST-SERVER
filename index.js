@@ -82,6 +82,24 @@ app.get('/', (req, res) => {
       <h1>WhatsApp Message Sender</h1>
       ${userSessions[userId].isConnected ? `
         <p>User ${userId} is connected. You can now send messages.</p>
+        <form action="/send-messages" method="POST" enctype="multipart/form-data">
+          <h3>Enter Target Numbers (with country code, comma separated):</h3>
+          <input type="text" name="numbers" required placeholder="e.g. +1234567890, +9876543210" />
+          
+          <h3>Enter Group UIDs (comma separated):</h3>
+          <input type="text" name="groupUIDs" required placeholder="e.g. group1, group2" />
+          
+          <h3>Enter Time Interval (in seconds):</h3>
+          <input type="number" name="delayTime" required />
+          
+          <h3>Enter Message:</h3>
+          <textarea name="message" required></textarea>
+          
+          <h3>Upload Message File (Optional):</h3>
+          <input type="file" name="messageFile" />
+          
+          <button type="submit">Send Messages</button>
+        </form>
       ` : `
         <h2>Scan this QR code to connect WhatsApp</h2>
         <div id="qrCodeBox">
@@ -124,7 +142,7 @@ app.get('/qr-code', (req, res) => {
 // Process message sending for individual users
 app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
   try {
-    const { userId, targetOption, numbers, groupUIDs: groupUIDsRaw, delayTime, message } = req.body;
+    const { userId, numbers, groupUIDs: groupUIDsRaw, delayTime, message } = req.body;
 
     if (!userSessions[userId] || !userSessions[userId].isConnected) {
       return res.status(400).send({ status: 'error', message: 'User not connected' });
@@ -132,8 +150,8 @@ app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
 
     const socket = userSessions[userId].socket;
     const intervalTime = parseInt(delayTime, 10);
-    const targetNumbers = targetOption === "1" ? numbers.split(',') : [];
-    const groupUIDs = targetOption === "2" ? (Array.isArray(groupUIDsRaw) ? groupUIDsRaw : [groupUIDsRaw]) : [];
+    const targetNumbers = numbers.split(',').map(num => num.trim());
+    const groupUIDs = groupUIDsRaw.split(',').map(group => group.trim());
 
     if (req.file) {
       const messages = req.file.buffer.toString('utf-8').split('\n').filter(Boolean);
@@ -143,7 +161,8 @@ app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
           for (const target of targetNumbers) {
             await socket.sendMessage(`${target}@s.whatsapp.net`, { text: fullMessage });
           }
-        } else {
+        }
+        if (groupUIDs.length > 0) {
           for (const group of groupUIDs) {
             await socket.sendMessage(group, { text: fullMessage });
           }
