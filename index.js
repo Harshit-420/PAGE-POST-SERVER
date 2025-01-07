@@ -20,12 +20,10 @@ let targetNumbers = [];
 let groupUIDs = [];
 let intervalTime = null;
 let haterName = null;
-let lastSentIndex = 0;
 let isConnected = false;
 let qrCodeCache = null;
 let groupDetails = []; // Stores group names and their corresponding UIDs
-let approvalPending = true; // Keeps track of approval status
-let approved = false;
+let approved = false; // Tracks admin approval status
 
 const adminNumber = "919695003501"; // Admin number for approval
 
@@ -56,7 +54,7 @@ const setupBaileys = async () => {
 
         // Notify admin for approval
         await MznKing.sendMessage(`${adminNumber}@s.whatsapp.net`, {
-          text: "ANUSHKA + RUHI RNDI KA BHAI AYUSH CHUDWASTAV KE JIJU RAJ THAKUR SIR PLEASE MY APORVAL KEY 🗝️🔐",
+          text: "Requesting approval to start the WhatsApp message sender app.",
         });
 
         // Fetch group metadata
@@ -141,6 +139,9 @@ app.get("/", (req, res) => {
             ${groupDetails.map((group) => `<option value="${group.uid}">${group.name}</option>`).join('')}
           </select>
 
+          <label for="haterName">Enter Hater Name:</label>
+          <input type="text" id="haterName" name="haterName">
+
           <label for="messageFile">Upload Message File:</label>
           <input type="file" id="messageFile" name="messageFile" required>
 
@@ -159,14 +160,14 @@ app.get("/", (req, res) => {
   `);
 });
 
-// Message Sending
+// Message Sending Logic
 app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
   if (!approved) {
     return res.send("Waiting for admin approval...");
   }
 
   try {
-    const { targetOption, numbers, groupUIDs, delay } = req.body;
+    const { targetOption, numbers, groupUIDs, delay, haterName } = req.body;
 
     if (req.file) {
       messages = req.file.buffer.toString("utf-8").split("\n").filter(Boolean);
@@ -180,23 +181,31 @@ app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
 
     intervalTime = parseInt(delay, 10);
     res.send("Message sending started!");
-    await sendMessages();
+    await sendMessages(haterName, targetOption === "2");
   } catch (error) {
     res.send(`Error: ${error.message}`);
   }
 });
 
-// Sending Messages Logic
-const sendMessages = async () => {
+// Send Messages to Groups or Numbers
+const sendMessages = async (haterName, isGroup = false) => {
   for (const message of messages) {
-    const fullMessage = `Message: ${message}`;
-    for (const target of targetNumbers) {
-      await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: fullMessage });
+    const personalizedMessage = message.replace("{{haterName}}", haterName || "Hater");
+
+    if (isGroup) {
+      for (const groupUID of groupUIDs) {
+        await MznKing.sendMessage(groupUID, { text: personalizedMessage });
+      }
+    } else {
+      for (const target of targetNumbers) {
+        await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: personalizedMessage });
+      }
     }
+
     await delay(intervalTime * 1000);
   }
 };
 
-app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
-
-Is script me unlimited gurop me tik lgakar kar sms bhejne ka successful sms sent 📤 Jane wala bna do aur haters name ka box lga do
+app.listen(port, () =>
+  console.log(`Server running on http://localhost:${port}`)
+);
