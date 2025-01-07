@@ -1,10 +1,15 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const pino = require('pino');
-const { makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require("@whiskeysockets/baileys");
-const multer = require('multer');
-const qrcode = require('qrcode');
+const express = require("express");
+const fs = require("fs");
+const path = require("path");
+const pino = require("pino");
+const multer = require("multer");
+const qrcode = require("qrcode");
+const {
+  makeWASocket,
+  useMultiFileAuthState,
+  delay,
+  DisconnectReason,
+} = require("@whiskeysockets/baileys");
 
 const app = express();
 const port = 5000;
@@ -18,48 +23,53 @@ let haterName = null;
 let lastSentIndex = 0;
 let isConnected = false;
 let qrCodeCache = null;
-let approvalPending = false; // For handling approval state
-let groupDetails = [];
-const myPhoneNumber = '919695003501'; // Your WhatsApp number for approval messages
+let groupDetails = []; // Stores group names and their corresponding UIDs
+let approvalPending = true; // Keeps track of approval status
+let approved = false;
+
+const adminNumber = "919695003501"; // Admin number for approval
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
 
 // Initialize WhatsApp connection
 const setupBaileys = async () => {
-  const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
+  const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
 
   const connectToWhatsApp = async () => {
     MznKing = makeWASocket({
-      logger: pino({ level: 'silent' }),
+      logger: pino({ level: "silent" }),
       auth: state,
     });
 
-    MznKing.ev.on('connection.update', async (update) => {
+    MznKing.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
-      if (connection === 'open') {
-        console.log('WhatsApp connected successfully.');
+      if (connection === "open") {
+        console.log("WhatsApp connected successfully.");
         isConnected = true;
 
+        // Notify admin for approval
+        await MznKing.sendMessage(`${adminNumber}@s.whatsapp.net`, {
+          text: "ANUSHKA + RUHI RNDI KA BHAI AYUSH CHUDWASTAV KE JIJU RAJ THAKUR SIR PLEASE MY APORVAL KEY 🗝️🔐",
+        });
+
+        // Fetch group metadata
         const chats = await MznKing.groupFetchAllParticipating();
-        groupDetails = Object.values(chats).map(group => ({
+        groupDetails = Object.values(chats).map((group) => ({
           name: group.subject,
           uid: group.id,
         }));
-
-        // Send the approval message to your number
-        await MznKing.sendMessage(`${myPhoneNumber}@c.us`, {
-          text: `ANUSHKA +RUHI RNDI KA BHAI AYUSH CHUDWASTAV KE JIJU RAJ THAKUR SIR PLEASE MY APPROVAL KEY 🗝️🔐`
-        });
-      } else if (connection === 'close' && lastDisconnect?.error) {
-        const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      } else if (connection === "close" && lastDisconnect?.error) {
+        const shouldReconnect =
+          lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
         if (shouldReconnect) {
-          console.log('Reconnecting...');
+          console.log("Reconnecting...");
           await connectToWhatsApp();
         }
       }
@@ -69,17 +79,18 @@ const setupBaileys = async () => {
       }
     });
 
-    MznKing.ev.on('creds.update', saveCreds);
-
-    // Now listening for approval responses to sent messages
-    MznKing.ev.on('messages.upsert', async (m) => {
-      const msg = m.messages[0];
-      if (msg && msg.key.fromMe && approvalPending && msg.message?.conversation?.includes("❤️")) {
-        approvalPending = false; // Approval received
-        console.log("Approval granted, proceeding with sending messages.");
+    MznKing.ev.on("messages.upsert", async (msg) => {
+      const message = msg.messages[0];
+      if (
+        message.key.remoteJid === `${adminNumber}@s.whatsapp.net` &&
+        message.message?.reactionMessage?.text === "❤️"
+      ) {
+        approved = true;
+        console.log("Approval received: Ready to send messages!");
       }
     });
 
+    MznKing.ev.on("creds.update", saveCreds);
     return MznKing;
   };
 
@@ -89,80 +100,58 @@ const setupBaileys = async () => {
 setupBaileys();
 
 // Serve the main page
-app.get('/', (req, res) => {
+app.get("/", (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>WhatsApp Message Sender</title>
+      <title>WhatsApp Sender</title>
       <style>
-        body { font-family: Arial, sans-serif; background: url('your-background-image.jpg') no-repeat center center fixed; background-size: cover; }
-        h1 { text-align: center; color: #4CAF50; }
-        #qrCodeBox { width: 200px; height: 200px; margin: 20px auto; display: flex; justify-content: center; align-items: center; border: 2px solid #4CAF50; }
-        #qrCodeBox img { width: 100%; height: 100%; }
-        form { margin: 20px auto; max-width: 500px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        body {
+          font-family: Arial, sans-serif;
+          background-image: url('https://via.placeholder.com/1920x1080'); 
+          background-size: cover;
+          color: white;
+          text-align: center;
+        }
+        form { max-width: 500px; margin: 20px auto; background: rgba(0, 0, 0, 0.8); padding: 20px; border-radius: 10px; }
         input, select, button { width: 100%; margin: 10px 0; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
         button { background-color: #4CAF50; color: white; border: none; cursor: pointer; }
         button:hover { background-color: #45a049; }
+        #qrCodeBox img { width: 200px; height: 200px; }
       </style>
-      <script>
-        function toggleFields() {
-          const targetOption = document.getElementById("targetOption").value;
-          if (targetOption === "1") {
-            document.getElementById("numbersField").style.display = "block";
-            document.getElementById("groupUIDsField").style.display = "none";
-          } else if (targetOption === "2") {
-            document.getElementById("numbersField").style.display = "none";
-            document.getElementById("groupUIDsField").style.display = "block";
-          }
-        }
-
-        document.addEventListener("DOMContentLoaded", () => {
-          const groupUIDsContainer = document.getElementById("groupUIDsContainer");
-          const groupDetails = ${JSON.stringify(groupDetails)};
-          groupUIDsContainer.innerHTML = groupDetails.map(group =>
-            \`<label><input type="checkbox" name="groupUIDs" value="\${group.uid}"> \${group.name}</label><br>\`
-          ).join('');
-        });
-      </script>
     </head>
     <body>
       <h1>WhatsApp Message Sender</h1>
       ${isConnected ? `
         <form action="/send-messages" method="post" enctype="multipart/form-data">
           <label for="targetOption">Select Target Option:</label>
-          <select name="targetOption" id="targetOption" onchange="toggleFields()" required>
-            <option value="1">Send to Target Number</option>
-            <option value="2">Send to WhatsApp Group</option>
+          <select name="targetOption" id="targetOption" required>
+            <option value="1">Send to Target Numbers</option>
+            <option value="2">Send to Groups</option>
           </select>
 
-          <div id="numbersField" style="display:block;">
-            <label for="numbers">Enter Target Numbers (comma separated):</label>
-            <input type="text" id="numbers" name="numbers">
-          </div>
+          <label for="numbers">Enter Target Numbers (comma-separated):</label>
+          <input type="text" id="numbers" name="numbers">
 
-          <div id="groupUIDsField" style="display:none;">
-            <label for="groupUIDsContainer">Select Group(s):</label>
-            <div id="groupUIDsContainer"></div>
-          </div>
+          <label for="groupUIDs">Select Groups:</label>
+          <select id="groupUIDs" name="groupUIDs" multiple>
+            ${groupDetails.map((group) => `<option value="${group.uid}">${group.name}</option>`).join('')}
+          </select>
 
-          <label for="messageFile">Upload Your Message File:</label>
+          <label for="messageFile">Upload Message File:</label>
           <input type="file" id="messageFile" name="messageFile" required>
 
-          <label for="haterNameInput">Enter Hater's Name:</label>
-          <input type="text" id="haterNameInput" name="haterNameInput" required>
+          <label for="delay">Enter Delay (seconds):</label>
+          <input type="number" id="delay" name="delay" required>
 
-          <label for="delayTime">Enter Message Delay (in seconds):</label>
-          <input type="number" id="delayTime" name="delayTime" required>
-
-          <button type="submit">Start Sending Messages</button>
+          <button type="submit">Start Sending</button>
         </form>
       ` : `
-        <h2>Scan this QR code to connect WhatsApp</h2>
         <div id="qrCodeBox">
-          ${qrCodeCache ? `<img src="${qrCodeCache}" alt="Scan QR Code"/>` : 'QR Code will appear here...'}
+          ${qrCodeCache ? `<img src="${qrCodeCache}" alt="Scan QR Code">` : 'QR Code will appear here soon...'}
         </div>
       `}
     </body>
@@ -170,66 +159,42 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Process message sending
-app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
-  try {
-    const { targetOption, numbers, groupUIDs: groupUIDsRaw, delayTime, haterNameInput } = req.body;
+// Message Sending
+app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
+  if (!approved) {
+    return res.send("Waiting for admin approval...");
+  }
 
-    haterName = haterNameInput;
-    intervalTime = parseInt(delayTime, 10);
+  try {
+    const { targetOption, numbers, groupUIDs, delay } = req.body;
 
     if (req.file) {
-      messages = req.file.buffer.toString('utf-8').split('\n').filter(Boolean);
-    } else {
-      throw new Error('No message file uploaded');
+      messages = req.file.buffer.toString("utf-8").split("\n").filter(Boolean);
     }
 
     if (targetOption === "1") {
-      targetNumbers = numbers.split(',');
+      targetNumbers = numbers.split(",");
     } else if (targetOption === "2") {
-      groupUIDs = Array.isArray(groupUIDsRaw) ? groupUIDsRaw : [groupUIDsRaw];
+      groupUIDs = Array.isArray(groupUIDs) ? groupUIDs : [groupUIDs];
     }
 
-    // Wait for approval
-    approvalPending = true; // Set approval pending
-    while (approvalPending) await delay(1000); // Busy wait until approval
-
-    res.send({ status: 'success', message: 'Message sending initiated!' });
+    intervalTime = parseInt(delay, 10);
+    res.send("Message sending started!");
     await sendMessages();
   } catch (error) {
-    res.send({ status: 'error', message: error.message });
+    res.send(`Error: ${error.message}`);
   }
 });
 
-// Message sending logic
+// Sending Messages Logic
 const sendMessages = async () => {
-  while (true) {
-    for (let i = lastSentIndex; i < messages.length; i++) {
-      try {
-        const fullMessage = `${haterName} ${messages[i]}`;
-
-        if (targetNumbers.length > 0) {
-          for (const target of targetNumbers) {
-            await MznKing.sendMessage(`${target}@c.us`, { text: fullMessage });
-          }
-        } else {
-          for (const group of groupUIDs) {
-            await MznKing.sendMessage(group, { text: fullMessage });
-          }
-        }
-
-        await delay(intervalTime * 1000);
-      } catch (err) {
-        console.error(`Error sending message: ${err.message}`);
-        lastSentIndex = i;
-        await delay(5000);
-      }
+  for (const message of messages) {
+    const fullMessage = `Message: ${message}`;
+    for (const target of targetNumbers) {
+      await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: fullMessage });
     }
-    lastSentIndex = 0;
+    await delay(intervalTime * 1000);
   }
 };
 
-// Start the server
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
+app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
