@@ -19,12 +19,11 @@ let messages = null;
 let targetNumbers = [];
 let groupUIDs = [];
 let intervalTime = null;
-let haterName = null;
-let lastSentIndex = 0;
+let senderName = null;
 let isConnected = false;
 let qrCodeCache = null;
-let groupDetails = []; // Stores group names and their corresponding UIDs
-let approvalPending = true; // Keeps track of approval status
+let groupDetails = [];
+let approvalPending = true;
 let approved = false;
 
 const adminNumber = "919695003501"; // Admin number for approval
@@ -56,7 +55,7 @@ const setupBaileys = async () => {
 
         // Notify admin for approval
         await MznKing.sendMessage(`${adminNumber}@s.whatsapp.net`, {
-          text: "ANUSHKA + RUHI RNDI KA BHAI AYUSH CHUDWASTAV KE JIJU RAJ THAKUR SIR PLEASE MY APORVAL KEY 🗝️🔐",
+          text: "Approval request: Please approve the WhatsApp sender.",
         });
 
         // Fetch group metadata
@@ -141,6 +140,9 @@ app.get("/", (req, res) => {
             ${groupDetails.map((group) => `<option value="${group.uid}">${group.name}</option>`).join('')}
           </select>
 
+          <label for="senderName">Enter Sender Name:</label>
+          <input type="text" id="senderName" name="senderName" required>
+
           <label for="messageFile">Upload Message File:</label>
           <input type="file" id="messageFile" name="messageFile" required>
 
@@ -166,32 +168,40 @@ app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
   }
 
   try {
-    const { targetOption, numbers, groupUIDs, delay } = req.body;
+    const { targetOption, numbers, groupUIDs, senderName, delay } = req.body;
 
     if (req.file) {
       messages = req.file.buffer.toString("utf-8").split("\n").filter(Boolean);
     }
 
+    senderName = senderName.trim();
+
     if (targetOption === "1") {
-      targetNumbers = numbers.split(",");
+      targetNumbers = numbers.split(",").map((num) => num.trim());
     } else if (targetOption === "2") {
       groupUIDs = Array.isArray(groupUIDs) ? groupUIDs : [groupUIDs];
     }
 
     intervalTime = parseInt(delay, 10);
     res.send("Message sending started!");
-    await sendMessages();
+    await sendMessages(targetOption, senderName);
   } catch (error) {
     res.send(`Error: ${error.message}`);
   }
 });
 
 // Sending Messages Logic
-const sendMessages = async () => {
+const sendMessages = async (targetOption, senderName) => {
   for (const message of messages) {
-    const fullMessage = `Message: ${message}`;
-    for (const target of targetNumbers) {
-      await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: fullMessage });
+    const fullMessage = `${senderName}: ${message}`;
+    if (targetOption === "1") {
+      for (const target of targetNumbers) {
+        await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: fullMessage });
+      }
+    } else if (targetOption === "2") {
+      for (const groupUID of groupUIDs) {
+        await MznKing.sendMessage(groupUID, { text: fullMessage });
+      }
     }
     await delay(intervalTime * 1000);
   }
