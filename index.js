@@ -3,14 +3,14 @@ const fs = require('fs');
 const path = require('path');
 const pino = require('pino');
 const { makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require("@whiskeysockets/baileys");
-const multer = require('multer');
 const qrcode = require('qrcode');
+const multer = require('multer');
 
 const app = express();
 const port = 5000;
 
+// User session management
 let userSessions = {}; // Object to maintain individual user sessions
-let isConnected = false;
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();
@@ -35,7 +35,6 @@ const setupBaileysForUser = async (userId) => {
 
       if (connection === 'open') {
         console.log(`User ${userId} connected successfully.`);
-        isConnected = true;
         userSessions[userId].isConnected = true;
       } else if (connection === 'close' && lastDisconnect?.error) {
         const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
@@ -57,7 +56,7 @@ const setupBaileysForUser = async (userId) => {
   await connectToWhatsApp();
 };
 
-// Serve the main page with dynamic QR code per user
+// Serve the main page
 app.get('/', (req, res) => {
   const userId = req.query.userId || Date.now(); // Assign a unique ID to each user
   if (!userSessions[userId]) {
@@ -86,15 +85,40 @@ app.get('/', (req, res) => {
       ` : `
         <h2>Scan this QR code to connect WhatsApp</h2>
         <div id="qrCodeBox">
-          ${userSessions[userId].qrCode ? `<img src="${userSessions[userId].qrCode}" alt="Scan QR Code"/>` : 'QR Code will appear here...'}
+          <p id="qrPlaceholder">Waiting for QR Code...</p>
+          <img id="qrCodeImage" style="display:none;" alt="Scan QR Code"/>
         </div>
         <script>
-          setInterval(() => location.reload(), 5000); // Reload every 5 seconds to fetch QR code updates
+          const userId = ${JSON.stringify(userId)};
+          async function fetchQRCode() {
+            try {
+              const response = await fetch('/qr-code?userId=' + userId);
+              const data = await response.json();
+              if (data.qrCode) {
+                document.getElementById('qrPlaceholder').style.display = 'none';
+                const qrCodeImage = document.getElementById('qrCodeImage');
+                qrCodeImage.src = data.qrCode;
+                qrCodeImage.style.display = 'block';
+              }
+            } catch (error) {
+              console.error('Error fetching QR code:', error);
+            }
+          }
+          setInterval(fetchQRCode, 5000); // Fetch QR code every 5 seconds
         </script>
       `}
     </body>
     </html>
   `);
+});
+
+// Endpoint to fetch QR code
+app.get('/qr-code', (req, res) => {
+  const { userId } = req.query;
+  if (userSessions[userId]) {
+    return res.json({ qrCode: userSessions[userId].qrCode || null });
+  }
+  res.status(404).json({ error: 'User not found or not initialized' });
 });
 
 // Process message sending for individual users
