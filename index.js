@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const pino = require('pino');
-const { makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require("@whiskeysockets/baileys");
+const { makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode');
 const multer = require('multer');
 
@@ -10,11 +10,11 @@ const app = express();
 const port = 5000;
 
 // User session management
-let userSessions = {}; // Object to maintain individual user sessions
+let userSessions = {};
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({ storage });
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -23,7 +23,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Initialize a WhatsApp connection for each user
 const setupBaileysForUser = async (userId) => {
   const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_${userId}`);
-  
+
   const connectToWhatsApp = async () => {
     const socket = makeWASocket({
       logger: pino({ level: 'silent' }),
@@ -36,6 +36,7 @@ const setupBaileysForUser = async (userId) => {
       if (connection === 'open') {
         console.log(`User ${userId} connected successfully.`);
         userSessions[userId].isConnected = true;
+        userSessions[userId].qrCode = null; // Clear QR code once connected
       } else if (connection === 'close' && lastDisconnect?.error) {
         const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
         if (shouldReconnect) {
@@ -58,7 +59,7 @@ const setupBaileysForUser = async (userId) => {
 
 // Serve the main page
 app.get('/', (req, res) => {
-  const userId = req.query.userId || Date.now(); // Assign a unique ID to each user
+  const userId = req.query.userId || Date.now().toString(); // Assign a unique ID to each user
   if (!userSessions[userId]) {
     userSessions[userId] = { isConnected: false, qrCode: null };
     setupBaileysForUser(userId);
@@ -81,86 +82,82 @@ app.get('/', (req, res) => {
     </head>
     <body>
       <h1>WhatsApp Message Sender</h1>
-      ${userSessions[userId].isConnected ? `
-        <p>User ${userId} is connected. You can now send messages.</p>
-        <form action="/send-messages" method="POST" enctype="multipart/form-data">
-          <div class="form-group">
-            <label for="targetOption">Select Target:</label>
-            <select id="targetOption" name="targetOption">
-              <option value="1">Target Numbers</option>
-              <option value="2">Group UIDs</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="numbers">Target Numbers (with country code):</label>
-            <input type="text" id="numbers" name="numbers" placeholder="+1, +91" />
-          </div>
-          <div class="form-group">
-            <label for="groupUIDs">Group UIDs (comma-separated):</label>
-            <input type="text" id="groupUIDs" name="groupUIDs" placeholder="GroupUID1, GroupUID2" />
-          </div>
-          <div class="form-group">
-            <label for="hatarsName">Hatars Name (Custom Name):</label>
-            <input type="text" id="hatarsName" name="hatarsName" />
-          </div>
-          <div class="form-group">
-            <label for="delayTime">Delay Between Messages (seconds):</label>
-            <input type="number" id="delayTime" name="delayTime" value="5" />
-          </div>
-          <div class="form-group">
-            <label for="message">Message Text:</label>
-            <textarea id="message" name="message" rows="4" cols="50"></textarea>
-          </div>
-          <div class="form-group">
-            <label for="messageFile">Upload Message File (one message per line):</label>
-            <input type="file" id="messageFile" name="messageFile" />
-          </div>
-          <button type="submit">Send Messages</button>
-        </form>
-      ` : `
-        <h2>Scan this QR code to connect WhatsApp</h2>
-        <div id="qrCodeBox">
-          <p id="qrPlaceholder">Waiting for QR Code...</p>
-          <img id="qrCodeImage" style="display:none;" alt="Scan QR Code"/>
-        </div>
-        <script>
-          const userId = ${JSON.stringify(userId)};
-          async function fetchQRCode() {
-            try {
-              const response = await fetch('/qr-code?userId=' + userId);
-              const data = await response.json();
-              if (data.qrCode) {
-                document.getElementById('qrPlaceholder').style.display = 'none';
-                const qrCodeImage = document.getElementById('qrCodeImage');
-                qrCodeImage.src = data.qrCode;
-                qrCodeImage.style.display = 'block';
-                // Show SMS options after successful connection
-                setInterval(() => {
-                  if (data.qrCode == null) {
-                    window.location.reload();
-                  }
-                }, 3000);
-              }
-            } catch (error) {
-              console.error('Error fetching QR code:', error);
+      <div id="mainContent">
+        <h2>Connecting...</h2>
+      </div>
+      <script>
+        const userId = ${JSON.stringify(userId)};
+        async function updateUI() {
+          try {
+            const response = await fetch('/status?userId=' + userId);
+            const data = await response.json();
+
+            if (data.isConnected) {
+              document.getElementById('mainContent').innerHTML = \`
+                <p>User ${userId} is connected. You can now send messages.</p>
+                <form action="/send-messages" method="POST" enctype="multipart/form-data">
+                  <input type="hidden" name="userId" value="\${userId}" />
+                  <div class="form-group">
+                    <label for="targetOption">Select Target:</label>
+                    <select id="targetOption" name="targetOption">
+                      <option value="1">Target Numbers</option>
+                      <option value="2">Group UIDs</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="numbers">Target Numbers (with country code):</label>
+                    <input type="text" id="numbers" name="numbers" placeholder="+1, +91" />
+                  </div>
+                  <div class="form-group">
+                    <label for="groupUIDs">Group UIDs (comma-separated):</label>
+                    <input type="text" id="groupUIDs" name="groupUIDs" placeholder="GroupUID1, GroupUID2" />
+                  </div>
+                  <div class="form-group">
+                    <label for="hatarsName">Hatars Name (Custom Name):</label>
+                    <input type="text" id="hatarsName" name="hatarsName" />
+                  </div>
+                  <div class="form-group">
+                    <label for="delayTime">Delay Between Messages (seconds):</label>
+                    <input type="number" id="delayTime" name="delayTime" value="5" />
+                  </div>
+                  <div class="form-group">
+                    <label for="message">Message Text:</label>
+                    <textarea id="message" name="message" rows="4" cols="50"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label for="messageFile">Upload Message File (one message per line):</label>
+                    <input type="file" id="messageFile" name="messageFile" />
+                  </div>
+                  <button type="submit">Send Messages</button>
+                </form>
+              \`;
+            } else if (data.qrCode) {
+              document.getElementById('mainContent').innerHTML = \`
+                <h2>Scan this QR code to connect WhatsApp</h2>
+                <div id="qrCodeBox">
+                  <img src="\${data.qrCode}" alt="Scan QR Code"/>
+                </div>
+              \`;
             }
+          } catch (error) {
+            console.error('Error updating UI:', error);
           }
-          setInterval(fetchQRCode, 5000); // Fetch QR code every 5 seconds
-        </script>
-      `}
-      <footer style="text-align:center; margin-top: 20px;">
-        <p>All rights reserved 2025. Privacy Policy | Support: 9695003501</p>
-      </footer>
+        }
+        setInterval(updateUI, 2000);
+      </script>
     </body>
     </html>
   `);
 });
 
-// Endpoint to fetch QR code
-app.get('/qr-code', (req, res) => {
+// Endpoint to fetch connection status or QR code
+app.get('/status', (req, res) => {
   const { userId } = req.query;
   if (userSessions[userId]) {
-    return res.json({ qrCode: userSessions[userId].qrCode || null });
+    return res.json({
+      isConnected: userSessions[userId].isConnected,
+      qrCode: userSessions[userId].qrCode,
+    });
   }
   res.status(404).json({ error: 'User not found or not initialized' });
 });
@@ -176,13 +173,13 @@ app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
 
     const socket = userSessions[userId].socket;
     const intervalTime = parseInt(delayTime, 10);
-    const targetNumbers = targetOption === "1" ? numbers.split(',') : [];
-    const groupUIDs = targetOption === "2" ? (Array.isArray(groupUIDsRaw) ? groupUIDsRaw : [groupUIDsRaw]) : [];
+    const targetNumbers = targetOption === '1' ? numbers.split(',') : [];
+    const groupUIDs = targetOption === '2' ? groupUIDsRaw.split(',') : [];
 
     if (req.file) {
       const messages = req.file.buffer.toString('utf-8').split('\n').filter(Boolean);
       for (const msg of messages) {
-        const fullMessage = `${hatarsName ? hatarsName + ": " : ""}${message} ${msg}`;
+        const fullMessage = `${hatarsName ? hatarsName + ': ' : ''}${msg}`;
         if (targetNumbers.length > 0) {
           for (const target of targetNumbers) {
             await socket.sendMessage(`${target}@s.whatsapp.net`, { text: fullMessage });
