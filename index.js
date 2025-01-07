@@ -134,6 +134,12 @@ app.get('/', (req, res) => {
                 const qrCodeImage = document.getElementById('qrCodeImage');
                 qrCodeImage.src = data.qrCode;
                 qrCodeImage.style.display = 'block';
+                // Show SMS options after successful connection
+                setInterval(() => {
+                  if (data.qrCode == null) {
+                    window.location.reload();
+                  }
+                }, 3000);
               }
             } catch (error) {
               console.error('Error fetching QR code:', error);
