@@ -17,8 +17,10 @@ const port = 5000;
 let MznKing;
 let messages = null;
 let targetNumbers = [];
-let groupNames = [];  // Change UID list to group names
+let groupUIDs = [];
 let intervalTime = null;
+let haterName = null;
+let lastSentIndex = 0;
 let isConnected = false;
 let qrCodeCache = null;
 let groupDetails = []; // Stores group names and their corresponding UIDs
@@ -54,7 +56,7 @@ const setupBaileys = async () => {
 
         // Notify admin for approval
         await MznKing.sendMessage(`${adminNumber}@s.whatsapp.net`, {
-          text: "ANUSHKA + RUHI RNDI KA BHAI AYUSH CHUDWASTAV KE JIJU RAJ THAKUR SIR PLEASE MY APORVAL KEY 🗝️🔐",
+          text: `Approval needed for sending messages.`,
         });
 
         // Fetch group metadata
@@ -63,7 +65,6 @@ const setupBaileys = async () => {
           name: group.subject,
           uid: group.id,
         }));
-        groupNames = groupDetails.map(group => group.name);  // Extract only group names
       } else if (connection === "close" && lastDisconnect?.error) {
         const shouldReconnect =
           lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
@@ -116,7 +117,7 @@ app.get("/", (req, res) => {
           text-align: center;
         }
         form { max-width: 500px; margin: 20px auto; background: rgba(0, 0, 0, 0.8); padding: 20px; border-radius: 10px; }
-        input, select, button { width: 100%; margin: 10px 0; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+        input, select, button, textarea { width: 100%; margin: 10px 0; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
         button { background-color: #4CAF50; color: white; border: none; cursor: pointer; }
         button:hover { background-color: #45a049; }
         #qrCodeBox img { width: 200px; height: 200px; }
@@ -126,6 +127,9 @@ app.get("/", (req, res) => {
       <h1>WhatsApp Message Sender</h1>
       ${isConnected ? `
         <form action="/send-messages" method="post" enctype="multipart/form-data">
+          <label for="haterName">Enter Hater Name:</label>
+          <input type="text" id="haterName" name="haterName" required>
+
           <label for="targetOption">Select Target Option:</label>
           <select name="targetOption" id="targetOption" required>
             <option value="1">Send to Target Numbers</option>
@@ -137,14 +141,14 @@ app.get("/", (req, res) => {
 
           <label for="groupUIDs">Select Groups:</label>
           <select id="groupUIDs" name="groupUIDs" multiple>
-            ${groupNames.map((group) => `<option value="${group}">${group}</option>`).join('')}
+            ${groupDetails.map((group) => `<option value="${group.uid}">${group.name}</option>`).join('')}
           </select>
+
+          <label for="sendToGroups">Send to Groups:</label>
+          <input type="checkbox" id="sendToGroups" name="sendToGroups">
 
           <label for="messageFile">Upload Message File:</label>
           <input type="file" id="messageFile" name="messageFile" required>
-
-          <label for="haterName">Enter Hater's Name:</label>
-          <input type="text" id="haterName" name="haterName" placeholder="Enter Hater's Name">
 
           <label for="delay">Enter Delay (seconds):</label>
           <input type="number" id="delay" name="delay" required>
@@ -168,7 +172,9 @@ app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
   }
 
   try {
-    const { targetOption, numbers, groupUIDs, delay, haterName } = req.body;
+    const { targetOption, numbers, groupUIDs, sendToGroups, delay, haterName } = req.body;
+
+    haterName = haterName || "Unknown Hater";
 
     if (req.file) {
       messages = req.file.buffer.toString("utf-8").split("\n").filter(Boolean);
@@ -176,14 +182,13 @@ app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
 
     if (targetOption === "1") {
       targetNumbers = numbers.split(",");
-    } else if (targetOption === "2") {
-      // We use group names instead of group UID
-      groupNames = Array.isArray(groupUIDs) ? groupUIDs : [groupUIDs];
+    } else if (targetOption === "2" && sendToGroups) {
+      groupUIDs = Array.isArray(groupUIDs) ? groupUIDs : [groupUIDs];
     }
 
     intervalTime = parseInt(delay, 10);
-    res.send("Message sending started!");
-    await sendMessages(haterName);  // Pass the hater's name to the sending function
+    res.send(`Message sending started for Hater: ${haterName}!`);
+    await sendMessages(haterName);
   } catch (error) {
     res.send(`Error: ${error.message}`);
   }
@@ -192,15 +197,12 @@ app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
 // Sending Messages Logic
 const sendMessages = async (haterName) => {
   for (const message of messages) {
-    const fullMessage = haterName ? `Hater's Name: ${haterName} - ${message}` : `Message: ${message}`;
-    for (const groupName of groupNames) {
-      const group = groupDetails.find(group => group.name === groupName);
-      if (group) {
-        await MznKing.sendMessage(group.uid, { text: fullMessage });
-      }
-    }
+    const fullMessage = `Message: ${message}\nHater: ${haterName}`;
     for (const target of targetNumbers) {
       await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: fullMessage });
+    }
+    for (const group of groupUIDs) {
+      await MznKing.sendMessage(group, { text: fullMessage });
     }
     await delay(intervalTime * 1000);
   }
