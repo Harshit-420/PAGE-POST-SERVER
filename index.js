@@ -20,10 +20,12 @@ let targetNumbers = [];
 let groupUIDs = [];
 let intervalTime = null;
 let haterName = null;
+let lastSentIndex = 0;
 let isConnected = false;
 let qrCodeCache = null;
 let groupDetails = []; // Stores group names and their corresponding UIDs
-let approved = false; // Tracks admin approval status
+let approvalPending = true; // Keeps track of approval status
+let approved = false;
 
 const adminNumber = "919695003501"; // Admin number for approval
 
@@ -54,7 +56,7 @@ const setupBaileys = async () => {
 
         // Notify admin for approval
         await MznKing.sendMessage(`${adminNumber}@s.whatsapp.net`, {
-          text: "Requesting approval to start the WhatsApp message sender app.",
+          text: "ANUSHKA + RUHI RNDI KA BHAI AYUSH CHUDWASTAV KE JIJU RAJ THAKUR SIR PLEASE MY APORVAL KEY 🗝️🔐",
         });
 
         // Fetch group metadata
@@ -139,14 +141,14 @@ app.get("/", (req, res) => {
             ${groupDetails.map((group) => `<option value="${group.uid}">${group.name}</option>`).join('')}
           </select>
 
-          <label for="haterName">Enter Hater Name:</label>
-          <input type="text" id="haterName" name="haterName">
-
           <label for="messageFile">Upload Message File:</label>
           <input type="file" id="messageFile" name="messageFile" required>
 
           <label for="delay">Enter Delay (seconds):</label>
           <input type="number" id="delay" name="delay" required>
+
+          <label for="haterName">Enter Haters Name:</label>
+          <input type="text" id="haterName" name="haterName" placeholder="Optional">
 
           <button type="submit">Start Sending</button>
         </form>
@@ -160,14 +162,17 @@ app.get("/", (req, res) => {
   `);
 });
 
-// Message Sending Logic
+// Message Sending
 app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
   if (!approved) {
     return res.send("Waiting for admin approval...");
   }
 
   try {
-    const { targetOption, numbers, groupUIDs, delay, haterName } = req.body;
+    const { targetOption, numbers, groupUIDs, delay, haterName: inputHaterName } = req.body;
+
+    // Use provided haters name if any
+    haterName = inputHaterName || "Unknown";
 
     if (req.file) {
       messages = req.file.buffer.toString("utf-8").split("\n").filter(Boolean);
@@ -181,31 +186,43 @@ app.post("/send-messages", upload.single("messageFile"), async (req, res) => {
 
     intervalTime = parseInt(delay, 10);
     res.send("Message sending started!");
-    await sendMessages(haterName, targetOption === "2");
+    await sendMessages();
   } catch (error) {
     res.send(`Error: ${error.message}`);
   }
 });
 
-// Send Messages to Groups or Numbers
-const sendMessages = async (haterName, isGroup = false) => {
+// Sending Messages Logic
+const sendMessages = async () => {
+  let totalMessagesSent = 0;
   for (const message of messages) {
-    const personalizedMessage = message.replace("{{haterName}}", haterName || "Hater");
-
-    if (isGroup) {
-      for (const groupUID of groupUIDs) {
-        await MznKing.sendMessage(groupUID, { text: personalizedMessage });
-      }
-    } else {
+    const fullMessage = `Message: ${message} \nFrom Hater: ${haterName}`;
+    if (targetNumbers.length) {
       for (const target of targetNumbers) {
-        await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: personalizedMessage });
+        await MznKing.sendMessage(`${target}@s.whatsapp.net`, { text: fullMessage });
+        totalMessagesSent++;
+      }
+    }
+
+    if (groupUIDs.length) {
+      for (const groupUID of groupUIDs) {
+        await MznKing.sendMessage(groupUID, { text: fullMessage });
+        totalMessagesSent++;
       }
     }
 
     await delay(intervalTime * 1000);
   }
+
+  console.log(`${totalMessagesSent} messages sent successfully!`);
+  // Display success message
+  app.get("/", (req, res) => {
+    res.send(`
+      <h1>WhatsApp Message Sender</h1>
+      <p>Successfully Sent ${totalMessagesSent} Messages 📤</p>
+      <a href="/">Go Back</a>
+    `);
+  });
 };
 
-app.listen(port, () =>
-  console.log(`Server running on http://localhost:${port}`)
-);
+app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
