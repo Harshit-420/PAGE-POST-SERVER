@@ -19,7 +19,8 @@
     "node-cron": "^3.0.0",
     "pino": "^8.10.0",
     "qrcode": "^1.5.0",
-    "uuid": "^8.3.2"
+    "uuid": "^8.3.2",
+    "set-interval-async": "^2.0.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.19"
