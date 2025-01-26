@@ -2,10 +2,10 @@
   "name": "whatsapp-message-sender",
   "version": "1.0.0",
   "description": "A server to send WhatsApp messages to multiple targets using Node.js and Baileys",
-  "main": "142.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node 142.js",
-    "dev": "nodemon 142.js",
+    "start": "node index.js",
+    "dev": "nodemon index.js",
     "build": "echo 'No build process needed'"
   },
   "author": "Raj Thakur",
