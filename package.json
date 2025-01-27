@@ -2,9 +2,9 @@
   "name": "whatsapp-sms-scheduler",
   "version": "1.0.0",
   "description": "WhatsApp and SMS message sender with scheduling and multiple users support",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "express": "^4.17.1",
